@@ -13,7 +13,7 @@ def load_ndarray(name):
     return np.loadtxt(DATA_DIR + name + '.nparr.gz')
 
 
-DATA_DIR = '/Users/david/epoch/ai_timelines_direct_approach/effective_compute_data.colab/'
+DATA_DIR = 'data/'
 DATA_FILE_LOCATION = DATA_DIR + 'gpu_trends_factors_clean.csv'
 GPU_TRENDS_CLEAN = pd.read_csv(DATA_FILE_LOCATION)
 GPU_TRENDS_TIME_LOG10 = pd.DataFrame({
@@ -115,7 +115,7 @@ def baseline_flops_per_second(
     lognorm_process_size_limit_samples: npt.NDArray[np.float64],
     lognorm_transistors_per_core_limit_samples: npt.NDArray[np.float64],
 ) -> list[list[float]]:
-    """ Return list of log10 rollouts in flops per second from start_year to 2052 """
+    """ Return list of log10 rollouts in flops per second from start_year to start_year + 7 """
     time_num_cores_perc_pred = load_time_num_cores_perc_pred()
     year_start_indices = get_year_start_indices(X2_TIME)
 
@@ -137,4 +137,5 @@ def baseline_flops_per_second(
           MVP_model=MVP_results
         )
         max_log_flops_per_second_rollouts.append(list(pred.values[year_start_indices]))
-    return max_log_flops_per_second_rollouts
+
+    return [rollout[:8] for rollout in max_log_flops_per_second_rollouts]

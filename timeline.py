@@ -1,12 +1,13 @@
 import numpy as np
 import numpy.typing as npt
-from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS
+from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain
 from typing import List
 import gpu_efficiency
 from k_performance import computation_for_k_performance
 
 
 def spending(
+    samples: int = NUM_SAMPLES,
     growth_rate: DistributionCI = DistributionCI('normal', 70, 1.1480341, 3.278781),
     gwp_growth_rate: DistributionCI = DistributionCI('normal', 70, 0.0114741, 0.045136),
     maximum_gwp_percentage: DistributionCI = DistributionCI('normal', 70, 0.0000083, 0.014047),
@@ -20,12 +21,12 @@ def spending(
 
     TODO: improve numbers by taking a look at Ben's estimates, and gdoc where I asked for input
     """
-    growth_rate_samples = np.maximum(growth_rate.sample(NUM_SAMPLES), 0.0000001)  # TODO: hack
-    maximum_gwp_percentage_samples = np.maximum(maximum_gwp_percentage.sample(NUM_SAMPLES), 0.000001)  # TODO: hack
-    gwp_growth_rate_samples = gwp_growth_rate.sample(NUM_SAMPLES)
+    growth_rate_samples = np.maximum(growth_rate.sample(samples), 0.0000001)  # TODO: hack
+    maximum_gwp_percentage_samples = np.maximum(maximum_gwp_percentage.sample(samples), 0.000001)  # TODO: hack
+    gwp_growth_rate_samples = gwp_growth_rate.sample(samples)
 
     spending_rollouts = []
-    for i in range(NUM_SAMPLES):
+    for i in range(samples):
         spending_rollouts.append([])
         gwp = np.log10(starting_gwp)
         max_spend = np.log10(starting_max_spend)
@@ -39,20 +40,21 @@ def spending(
 
 
 def flops_per_dollar(
+    samples: int = NUM_SAMPLES,
     transistors_per_core_limit: DistributionCI = DistributionCI('lognormal', 70, 0.896, 1.979),
     process_size_limit: DistributionCI = DistributionCI('lognormal', 70, 1.396, 2.479),
     process_efficiency: DistributionCI = DistributionCI('lognormal', 95, 0.005, 0.01),
     hardware_specialization: DistributionCI = DistributionCI('lognormal', 95, 0.005, 0.01),
     gpu_dollar_cost: int = 500,
 ):
-    transistors_per_core_limit_samples = transistors_per_core_limit.sample(NUM_SAMPLES)
-    process_size_limit_samples = process_size_limit.sample(NUM_SAMPLES)
-    process_efficiency_samples = process_efficiency.sample(NUM_SAMPLES)
-    hardware_specialization_samples = hardware_specialization.sample(NUM_SAMPLES)
+    transistors_per_core_limit_samples = transistors_per_core_limit.sample(samples)
+    process_size_limit_samples = process_size_limit.sample(samples)
+    process_efficiency_samples = process_efficiency.sample(samples)
+    hardware_specialization_samples = hardware_specialization.sample(samples)
 
     # We use Marius's estimate to get a baseline projection, as a list of rollouts
     log_flops_per_second: List[List[float]] = gpu_efficiency.baseline_flops_per_second(
-        NUM_SAMPLES, process_size_limit_samples, transistors_per_core_limit_samples
+        samples, process_size_limit_samples, transistors_per_core_limit_samples
     )
 
     # Then, we modify the baseline with hardware_specialization, and process_efficiency (the latter only kicking in
@@ -88,33 +90,43 @@ def flops_per_dollar(
 
 
 def algorithmic_improvements(
-    growth_rate: DistributionCI = DistributionCI('normal', 95, .246, 2.1518),
+    growth_rate: DistributionCI = DistributionCI('normal', 95, 0.246, 2.1518),
     transfer_multiplier: DistributionCI = DistributionCI('normal', 70, 0.4, 1.1),
     limit: DistributionCI = DistributionCI('lognormal', 70, 1e2, 1e10),
-) -> Timeline:
+    samples: int = NUM_SAMPLES,
+):
     """
     Three components:
-    - Base growth rate, from the "Algorithmic Progress in Computer Vision" paper gives us 100.96% each year, 95% CI is [24.60%, 215.18%]. We could combine this with Anson's findings on algo progress in LMs, if that becomes available. Should probably include some negative values (regulation, knowledge loss, etc)
-    - Domain transfer multiplier: how much we should modify the rate to account for algorithmic progress being a different domain.
+    - Base growth rate, from the "Algorithmic Progress in Computer Vision" paper gives us 100.96% each year, 95% CI is
+    [24.60%, 215.18%]. We could combine this with Anson's findings on algo progress in LMs, if that becomes available.
+    - Domain transfer multiplier: how much we should modify the rate to account for algorithmic progress being a
+    different domain.
     - Limit: at what multiplier does algorithmic growth stop?
 
-    Growth slows as we approach the limit. Distribution values represent the quantity you should multiply physical compute by to get effective compute
+    Growth slows as we approach the limit. Distribution values represent the quantity you should multiply physical
+    compute by to get effective compute
     """
-    tai_growth_rate_samples = growth_rate.sample(NUM_SAMPLES) * transfer_multiplier.sample(NUM_SAMPLES)
-    limit_samples = np.log10(np.maximum(limit.sample(NUM_SAMPLES), 0.0001))  # TODO: hack
+    # Algorithmic regress is possible (due to regulation, knowledge loss, eg), which is represented by a multiplier
+    # between 0 and 1. But a negative rate is not possible.
+    transfer_multiplier_samples = np.maximum(transfer_multiplier.sample(samples), 0)
+    growth_multiplier_samples = np.maximum(1 + (growth_rate.sample(samples) * transfer_multiplier_samples), 1e-10)
+    # On the other hand, current performance means that we know the limit for the multiplier is at least 1, so we do
+    # enforce that
+    limit_samples = np.log10(np.maximum(limit.sample(samples), 1))
 
     algorithmic_improvement = []
-    for rollout in range(NUM_SAMPLES):
+    for rollout in range(samples):
         algorithmic_improvement.append([])
-        rate = 0
+        current_improvement = 0
         for _ in YEAR_OFFSETS:
-            rate += np.log10(1 + tai_growth_rate_samples[rollout])
-            algorithmic_improvement[rollout].append(limit_samples[rollout] *
-                                                    (1 - np.exp(-rate / limit_samples[rollout])))
+            current_improvement += np.log10(growth_multiplier_samples[rollout])
+            algorithmic_improvement[rollout].append(constrain(value=current_improvement, limit=limit_samples[rollout]))
+
     return np.stack(algorithmic_improvement)
 
 
 def tai_requirements(
+    samples: int = NUM_SAMPLES,
     slowdown: DistributionCI = DistributionCI('lognormal', 70, 9.85, 289.05),
     log_k_performance: DistributionCI = DistributionCI('lognormal', 70, 3129, 141714),
 ) -> Distribution:
@@ -125,8 +137,8 @@ def tai_requirements(
 
     TODO: what's going on with the unused uncertainty over A,B,alpha,beta params in Matthew's notebook?
     """
-    slowdown_samples = slowdown.sample(NUM_SAMPLES)
-    log_k_performance_samples = log_k_performance.sample(NUM_SAMPLES)
+    slowdown_samples = slowdown.sample(samples)
+    log_k_performance_samples = log_k_performance.sample(samples)
 
     log_flops_needed_sample = []
     for i in range(len(slowdown_samples)):
@@ -135,11 +147,13 @@ def tai_requirements(
     return np.array(log_flops_needed_sample)
 
 
-def sample_timeline():
-    compute_available = spending() + flops_per_dollar() + algorithmic_improvements()
-    arrivals = compute_available.T > tai_requirements()
+def sample_timeline(
+    samples: int = NUM_SAMPLES,
+):
+    compute_available = spending(samples=samples) + flops_per_dollar(samples=samples) + algorithmic_improvements(samples=samples)
+    arrivals = compute_available.T > tai_requirements(samples=samples)
 
-    return np.sum(arrivals, axis=1) / NUM_SAMPLES
+    return np.sum(arrivals, axis=1) / samples
 
 
 if __name__ == '__main__':

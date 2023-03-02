@@ -4,6 +4,7 @@ import random
 from typing import Literal
 from dataclasses import dataclass
 from scipy.stats import lognorm, norm
+import math
 
 # Just for development
 np.random.seed(0)
@@ -13,7 +14,7 @@ START_YEAR = 2023
 END_YEAR = 2100
 YEARS = list(range(START_YEAR, END_YEAR))
 YEAR_OFFSETS = list(range(END_YEAR - START_YEAR))
-NUM_SAMPLES = 100_000
+NUM_SAMPLES = 10_000
 
 # Types
 Year = int
@@ -44,3 +45,9 @@ class DistributionCI:
                 return np.random.lognormal(mu, sigma, samples)
             case _:
                 raise ValueError(f"Unsupported distribution: {self.distribution}")
+
+
+def constrain(*, value: float, limit: float) -> float:
+    if math.isclose(limit, 0):
+        return 0
+    return limit * (1 - np.exp(-value / limit))
