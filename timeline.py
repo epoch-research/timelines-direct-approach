@@ -1,5 +1,4 @@
 import numpy as np
-import numpy.typing as npt
 from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain
 from typing import List
 import gpu_efficiency
@@ -22,10 +21,10 @@ def spending(
     TODO: improve numbers by taking a look at Ben's estimates
     """
     # Make sure the growth multiplier is positive
-    growth_rate_samples = np.maximum(growth_rate.sample(samples), -1 + 1e-10)
+    growth_multiplier_samples = np.log10(1 + np.maximum(growth_rate.sample(samples), -1 + 1e-10))
     # TODO: change GWP percentage to a beta?
-    maximum_gwp_percentage_samples = np.maximum(maximum_gwp_percentage.sample(samples), 1e-10)
-    gwp_growth_rate_samples = gwp_growth_rate.sample(samples)
+    maximum_gwp_percentage_samples = np.log10(np.maximum(maximum_gwp_percentage.sample(samples), 1e-10))
+    gwp_growth_multiplier_samples = np.log10(1 + gwp_growth_rate.sample(samples))
 
     spending_rollouts = []
     for i in range(samples):
@@ -33,10 +32,11 @@ def spending(
         gwp = np.log10(starting_gwp)
         max_spend = np.log10(starting_max_spend)
         for _ in YEAR_OFFSETS:
-            max_spend += np.log10(1 + growth_rate_samples[i])
-            gwp += np.log10(1 + gwp_growth_rate_samples[i])
-            dollar_limit = gwp + np.log10(maximum_gwp_percentage_samples[i])
-            spending_rollouts[i].append(constrain(value=max_spend, limit=dollar_limit))
+            max_spend += growth_multiplier_samples[i]
+            gwp += gwp_growth_multiplier_samples[i]
+            dollar_limit = gwp + maximum_gwp_percentage_samples[i]
+            constrained = constrain(value=10**max_spend, limit=10**dollar_limit)
+            spending_rollouts[i].append(np.log10(max(1e-10, constrained)))
 
     return np.stack(spending_rollouts)
 
@@ -115,7 +115,8 @@ def algorithmic_improvements(
         current_improvement = 0
         for _ in YEAR_OFFSETS:
             current_improvement += np.log10(growth_multiplier_samples[rollout])
-            algorithmic_improvement[rollout].append(constrain(value=current_improvement, limit=limit_samples[rollout]))
+            constrained = constrain(value=10**current_improvement, limit=10**limit_samples[rollout])
+            algorithmic_improvement[rollout].append(np.log10(max(constrained, 1e-10)))
 
     return np.stack(algorithmic_improvement)
 
