@@ -12,17 +12,19 @@ def spending(
     gwp_growth_rate: DistributionCI = DistributionCI('normal', 70, 0.0114741, 0.045136),
     maximum_gwp_percentage: DistributionCI = DistributionCI('normal', 70, 0.0000083, 0.014047),
     starting_gwp: float = 1e14,
-    starting_max_spend: float = 20e6,
+    starting_max_spend: float = 2e7,
 ) -> Timeline:
     """
-    We assume that the current maximum amount people are willing to spend on a training run is $20e6, and that it will
+    We assume that the current maximum amount people are willing to spend on a training run is $2e7, and that it will
     grow at `growth_rate` until we reach `maximum_gwp_percentage` of GWP, at which point it will grow at the rate of
-    GWP. Current GWP is 1e14.
+    GWP.
 
-    TODO: improve numbers by taking a look at Ben's estimates, and gdoc where I asked for input
+    TODO: improve numbers by taking a look at Ben's estimates
     """
-    growth_rate_samples = np.maximum(growth_rate.sample(samples), 0.0000001)  # TODO: hack
-    maximum_gwp_percentage_samples = np.maximum(maximum_gwp_percentage.sample(samples), 0.000001)  # TODO: hack
+    # Make sure the growth multiplier is positive
+    growth_rate_samples = np.maximum(growth_rate.sample(samples), -1 + 1e-10)
+    # TODO: change GWP percentage to a beta?
+    maximum_gwp_percentage_samples = np.maximum(maximum_gwp_percentage.sample(samples), 1e-10)
     gwp_growth_rate_samples = gwp_growth_rate.sample(samples)
 
     spending_rollouts = []
@@ -34,7 +36,7 @@ def spending(
             max_spend += np.log10(1 + growth_rate_samples[i])
             gwp += np.log10(1 + gwp_growth_rate_samples[i])
             dollar_limit = gwp + np.log10(maximum_gwp_percentage_samples[i])
-            spending_rollouts[i].append(dollar_limit * (1 - np.exp(-max_spend/dollar_limit)))
+            spending_rollouts[i].append(constrain(value=max_spend, limit=dollar_limit))
 
     return np.stack(spending_rollouts)
 
