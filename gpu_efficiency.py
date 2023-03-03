@@ -7,6 +7,7 @@ import pandas as pd
 from statsmodels.regression.linear_model import RegressionResults
 from datetime import datetime
 import common
+import itertools
 
 
 def load_ndarray(name):
@@ -115,7 +116,7 @@ def baseline_flops_per_second(
     lognorm_process_size_limit_samples: npt.NDArray[np.float64],
     lognorm_transistors_per_core_limit_samples: npt.NDArray[np.float64],
 ) -> list[list[float]]:
-    """ Return list of log10 rollouts in flops per second from start_year to start_year + 7 """
+    """ Return list of log10 rollouts in flops per second from start_year to end_year """
     time_num_cores_perc_pred = load_time_num_cores_perc_pred()
     year_start_indices = get_year_start_indices(X2_TIME)
 
@@ -138,4 +139,6 @@ def baseline_flops_per_second(
         )
         max_log_flops_per_second_rollouts.append(list(pred.values[year_start_indices]))
 
-    return [rollout[:8] for rollout in max_log_flops_per_second_rollouts]
+    # Assume a baseline in which the last year of the projection is the best we can do until the timeline model ends
+    return [rollout + list(itertools.repeat(rollout[-1], (len(common.YEARS) - len(rollout))))
+            for rollout in max_log_flops_per_second_rollouts]

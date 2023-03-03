@@ -57,10 +57,9 @@ def flops_per_dollar(
         samples, process_size_limit_samples, transistors_per_core_limit_samples
     )
 
-    # Then, we modify the baseline with hardware_specialization, and process_efficiency (the latter only kicking in
+    # Then, we modify the baseline with hardware_specialization and process_efficiency (the latter only kicking in
     # once the rate of improvement falls below 10% per year)
     log_flops_per_dollar = []
-    rollout_years = len(log_flops_per_second[0])
     for rollout_idx, rollout in enumerate(log_flops_per_second):
         log_flops_per_dollar.append([])
         cumulative_multiplier = 1
@@ -68,18 +67,12 @@ def flops_per_dollar(
         hardware_specialization_rate = 1 + hardware_specialization_samples[rollout_idx]
         for year_offset in YEAR_OFFSETS:
             cumulative_multiplier *= hardware_specialization_rate * process_efficiency_rate
-            if year_offset < rollout_years:
-                rollout[year_offset] += np.log10(cumulative_multiplier)
-            else:
-                # We've now progressed past the years considered in the baseline projection,
-                # so use the previous year as the baseline
-                rollout.append(rollout[-1] + np.log10(cumulative_multiplier))
+            rollout[year_offset] += np.log10(cumulative_multiplier)
 
-            # check if rate of improvement has fallen below 10%,
-            # at which point we start considering process_efficiency
-            # TODO: does this do what we want when year_offset is 0?
-            growth_rate = 10**(rollout[year_offset] - rollout[year_offset - 1]) - 1 if year_offset else 0
-            if year_offset and growth_rate < np.log10(1.1):
+            # check if rate of improvement has fallen below 10%, at which point we start considering process_efficiency
+            # Use a reasonable, >10% growth rate for the first year
+            growth_rate = 10**(rollout[year_offset] - rollout[year_offset - 1]) - 1 if year_offset else 0.37
+            if year_offset and growth_rate < 0.1:
                 process_efficiency_rate = 1 + process_efficiency_samples[rollout_idx]
 
             amortization_years = 1.2 / (growth_rate + 0.1)
@@ -110,8 +103,8 @@ def algorithmic_improvements(
     # between 0 and 1. But a negative rate is not possible.
     transfer_multiplier_samples = np.maximum(transfer_multiplier.sample(samples), 0)
     growth_multiplier_samples = np.maximum(1 + (growth_rate.sample(samples) * transfer_multiplier_samples), 1e-10)
-    # On the other hand, current performance means that we know the limit for the multiplier is at least 1, so we do
-    # enforce that
+    # On the other hand, current performance means that we know the lower limit for the multiplier is at least 1, so we
+    # do enforce that
     limit_samples = np.log10(np.maximum(limit.sample(samples), 1))
 
     algorithmic_improvement = []
