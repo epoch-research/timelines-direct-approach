@@ -9,7 +9,7 @@ def spending(
     samples: int = NUM_SAMPLES,
     growth_rate: DistributionCI = DistributionCI('normal', 70, 1.1480341, 3.278781),
     gwp_growth_rate: DistributionCI = DistributionCI('normal', 70, 0.0114741, 0.045136),
-    maximum_gwp_percentage: DistributionCI = DistributionCI('normal', 70, 0.0000083, 0.014047),
+    max_gwp_pct: DistributionCI = DistributionCI('normal', 70, 0.0000083, 0.014047),
     starting_gwp: float = 1e14,
     starting_max_spend: float = 2e7,
 ) -> Timeline:
@@ -23,7 +23,7 @@ def spending(
     # Make sure the growth multiplier is positive
     growth_multiplier_samples = np.log10(1 + np.maximum(growth_rate.sample(samples), -1 + 1e-10))
     # TODO: change GWP percentage to a beta?
-    maximum_gwp_percentage_samples = np.log10(np.maximum(maximum_gwp_percentage.sample(samples), 1e-10))
+    max_gwp_pct_samples = np.log10(np.maximum(max_gwp_pct.sample(samples), 1e-10))
     gwp_growth_multiplier_samples = np.log10(1 + gwp_growth_rate.sample(samples))
 
     spending_rollouts = []
@@ -34,7 +34,7 @@ def spending(
         for _ in YEAR_OFFSETS:
             max_spend += growth_multiplier_samples[i]
             gwp += gwp_growth_multiplier_samples[i]
-            dollar_limit = gwp + maximum_gwp_percentage_samples[i]
+            dollar_limit = gwp + max_gwp_pct_samples[i]
             constrained = constrain(value=10**max_spend, limit=10**dollar_limit)
             spending_rollouts[i].append(np.log10(max(1e-10, constrained)))
 
