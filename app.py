@@ -42,6 +42,14 @@ def ci_input(label: str, timeline_func: Callable[..., Timeline], param_name: str
 
     return DistributionCI(distribution_ci.distribution, interval_width, lower, upper)
 
+
+def number_input(label: str, timeline_func: Callable[..., Timeline], param_name: str, **kwargs):
+    default = inspect.signature(timeline_func).parameters[param_name].default
+    # add json loading here
+
+    return st.number_input(label, value=default, **kwargs)
+
+
 # Disable plus/minus buttons
 st.markdown("""
 <style>

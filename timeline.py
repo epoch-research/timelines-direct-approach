@@ -7,11 +7,13 @@ from k_performance import computation_for_k_performance
 
 def spending(
     samples: int = NUM_SAMPLES,
+    # from Ben's estimate of 0.1 to 0.3 OOMs per year in https://epochai.org/blog/trends-in-the-dollar-training-cost-of-machine-learning-systems#appendix-i-overall-best-guess-for-the-growth-rate-in-training-cost:~:text=my%20all%2Dthings%2Dconsidered%20view%20is%200.2%20OOMs/year%20(90%25%20CI%3A%200.1%20to%200.3%20OOMs/year
     # Epoch staff aggregate: DistributionCI('normal', 70, 1.1480341, 3.278781)
-    # from Ben's estimate of 0.1 to 0.3 OOMs per year
     invest_growth_rate: DistributionCI = DistributionCI('normal', 90, 0.2589254117941673, 0.9952623149688795),
+    # average of Epoch staff estimates
     gwp_growth_rate: DistributionCI = DistributionCI('normal', 70, 0.0114741, 0.045136),
-    max_gwp_pct: DistributionCI = DistributionCI('lognormal', 70, 0.0000083, 0.014047),
+    # Ben's estimate (ie 0.004% to 5%) (Matthew's estimate: DistributionCI('lognormal', 70, 0.0000083, 0.014047))
+    max_gwp_pct: DistributionCI = DistributionCI('lognormal', 95, 0.00004, 0.05),
     starting_gwp: float = 1e14,
     starting_max_spend: float = 2e7,
 ) -> Timeline:
@@ -19,11 +21,6 @@ def spending(
     We assume that the current maximum amount people are willing to spend on a training run is $2e7, which will grow at
     `invest_growth_rate` until we reach the `max_gwp_pct` of GWP, at which point it will grow at the rate of GWP
     (`gwp_growth_rate`).
-
-    `invest_growth_rate`: gotten from Ben's estimate of 0.1 to 0.3 OOMs per year
-       https://epochai.org/blog/trends-in-the-dollar-training-cost-of-machine-learning-systems#appendix-i-overall-best-guess-for-the-growth-rate-in-training-cost:~:text=my%20all%2Dthings%2Dconsidered%20view%20is%200.2%20OOMs/year%20(90%25%20CI%3A%200.1%20to%200.3%20OOMs/year
-    `gwp_growth_rate`: average of Epoch staff estimates
-    `max_gwp_pct`: average of Epoch staff estimates
     """
     # The growth rate can be negative, but the multiplier needs to be positive
     invest_growth_multiplier_samples = np.log10(resample_between(1 + invest_growth_rate.sample(samples), min=0))
