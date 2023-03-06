@@ -1,14 +1,10 @@
 import numpy as np
-import numpy.typing as npt
 import random
-from typing import Literal
+import numpy.typing as npt
+from typing import Literal, Optional
 from dataclasses import dataclass
-from scipy.stats import lognorm, norm
+from scipy.stats import norm
 import math
-
-# Just for development
-np.random.seed(0)
-random.seed(0)
 
 START_YEAR = 2023
 END_YEAR = 2100
@@ -51,3 +47,16 @@ def constrain(*, value: float, limit: float) -> float:
     if math.isclose(limit, 0):
         return 0
     return limit * (1 - np.exp(-value / limit))
+
+
+def resample_between(samples: npt.NDArray[np.float64], min: Optional[float] = None, max: Optional[float] = None):
+    assert min is not None or max is not None
+    condition = np.full(samples.shape, True)
+    if min:
+        condition = condition & (samples > min)
+    if max:
+        condition = condition & (samples < max)
+
+    matching_samples = samples[condition]
+    samples_needed = len(samples) - len(matching_samples)
+    return np.concatenate([matching_samples, np.array(np.random.choice(matching_samples, size=samples_needed))])

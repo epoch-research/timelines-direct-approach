@@ -1,5 +1,5 @@
 import numpy as np
-from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain
+from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain, resample_between
 from typing import List
 import gpu_efficiency
 from k_performance import computation_for_k_performance
@@ -7,24 +7,29 @@ from k_performance import computation_for_k_performance
 
 def spending(
     samples: int = NUM_SAMPLES,
-    growth_rate: DistributionCI = DistributionCI('normal', 70, 1.1480341, 3.278781),
+    # Epoch staff aggregate: DistributionCI('normal', 70, 1.1480341, 3.278781)
+    # from Ben's estimate of 0.1 to 0.3 OOMs per year
+    invest_growth_rate: DistributionCI = DistributionCI('normal', 90, 0.2589254117941673, 0.9952623149688795),
     gwp_growth_rate: DistributionCI = DistributionCI('normal', 70, 0.0114741, 0.045136),
-    max_gwp_pct: DistributionCI = DistributionCI('normal', 70, 0.0000083, 0.014047),
+    max_gwp_pct: DistributionCI = DistributionCI('lognormal', 70, 0.0000083, 0.014047),
     starting_gwp: float = 1e14,
     starting_max_spend: float = 2e7,
 ) -> Timeline:
     """
-    We assume that the current maximum amount people are willing to spend on a training run is $2e7, and that it will
-    grow at `growth_rate` until we reach `maximum_gwp_percentage` of GWP, at which point it will grow at the rate of
-    GWP.
+    We assume that the current maximum amount people are willing to spend on a training run is $2e7, which will grow at
+    `invest_growth_rate` until we reach the `max_gwp_pct` of GWP, at which point it will grow at the rate of GWP
+    (`gwp_growth_rate`).
 
-    TODO: improve numbers by taking a look at Ben's estimates
+    `invest_growth_rate`: gotten from Ben's estimate of 0.1 to 0.3 OOMs per year
+       https://epochai.org/blog/trends-in-the-dollar-training-cost-of-machine-learning-systems#appendix-i-overall-best-guess-for-the-growth-rate-in-training-cost:~:text=my%20all%2Dthings%2Dconsidered%20view%20is%200.2%20OOMs/year%20(90%25%20CI%3A%200.1%20to%200.3%20OOMs/year
+    `gwp_growth_rate`: average of Epoch staff estimates
+    `max_gwp_pct`: average of Epoch staff estimates
     """
-    # Make sure the growth multiplier is positive
-    growth_multiplier_samples = np.log10(1 + np.maximum(growth_rate.sample(samples), -1 + 1e-10))
-    # TODO: change GWP percentage to a beta?
-    max_gwp_pct_samples = np.log10(np.maximum(max_gwp_pct.sample(samples), 1e-10))
-    gwp_growth_multiplier_samples = np.log10(1 + gwp_growth_rate.sample(samples))
+    # The growth rate can be negative, but the multiplier needs to be positive
+    invest_growth_multiplier_samples = np.log10(resample_between(1 + invest_growth_rate.sample(samples), min=0))
+    max_gwp_pct_samples = np.log10(max_gwp_pct.sample(samples))
+    # Again, the growth rate can be negative, but the multiplier needs to be positive
+    gwp_growth_multiplier_samples = np.log10(resample_between(1 + gwp_growth_rate.sample(samples), min=0))
 
     spending_rollouts = []
     for i in range(samples):
@@ -32,7 +37,7 @@ def spending(
         gwp = np.log10(starting_gwp)
         max_spend = np.log10(starting_max_spend)
         for _ in YEAR_OFFSETS:
-            max_spend += growth_multiplier_samples[i]
+            max_spend += invest_growth_multiplier_samples[i]
             gwp += gwp_growth_multiplier_samples[i]
             dollar_limit = gwp + max_gwp_pct_samples[i]
             constrained = constrain(value=10**max_spend, limit=10**dollar_limit)
@@ -86,7 +91,7 @@ def flops_per_dollar(
 
 def algorithmic_improvements(
     growth_rate: DistributionCI = DistributionCI('normal', 95, 0.246, 2.1518),
-    transfer_multiplier: DistributionCI = DistributionCI('normal', 70, 0.4, 1.1),
+    transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1),
     limit: DistributionCI = DistributionCI('lognormal', 70, 1e2, 1e10),
     samples: int = NUM_SAMPLES,
 ):
@@ -101,13 +106,14 @@ def algorithmic_improvements(
     Growth slows as we approach the limit. Distribution values represent the quantity you should multiply physical
     compute by to get effective compute
     """
+    transfer_multiplier_samples = transfer_multiplier.sample(samples)
     # Algorithmic regress is possible (due to regulation, knowledge loss, eg), which is represented by a multiplier
     # between 0 and 1. But a negative rate is not possible.
-    transfer_multiplier_samples = np.maximum(transfer_multiplier.sample(samples), 0)
-    growth_multiplier_samples = np.maximum(1 + (growth_rate.sample(samples) * transfer_multiplier_samples), 1e-10)
+    growth_multiplier_samples = 1 + (growth_rate.sample(samples) * transfer_multiplier_samples)
+    growth_multiplier_samples = resample_between(growth_multiplier_samples, min=0)
     # On the other hand, current performance means that we know the lower limit for the multiplier is at least 1, so we
     # do enforce that
-    limit_samples = np.log10(np.maximum(limit.sample(samples), 1))
+    limit_samples = np.log10(resample_between(limit.sample(samples), min=1))
 
     algorithmic_improvement = []
     for rollout in range(samples):
@@ -115,8 +121,8 @@ def algorithmic_improvements(
         current_improvement = 0
         for _ in YEAR_OFFSETS:
             current_improvement += np.log10(growth_multiplier_samples[rollout])
-            constrained = constrain(value=10**current_improvement, limit=10**limit_samples[rollout])
-            algorithmic_improvement[rollout].append(np.log10(max(constrained, 1e-10)))
+            constrained = np.log10(constrain(value=10**current_improvement, limit=10**limit_samples[rollout]))
+            algorithmic_improvement[rollout].append(max(constrained, 1e-10))  # TODO: hack
 
     return np.stack(algorithmic_improvement)
 
@@ -131,7 +137,7 @@ def tai_requirements(
     - slowdown: the degree to which the human judge will update slower than the ideal predictor.
     - k_performance: the length of the transformative task
 
-    TODO: what's going on with the unused uncertainty over A,B,alpha,beta params in Matthew's notebook?
+    TODO: should we start incorporating uncertainty over the A,B,alpha,beta params?
     """
     slowdown_samples = slowdown.sample(samples)
     log_k_performance_samples = log_k_performance.sample(samples)
@@ -153,6 +159,4 @@ def sample_timeline(
 
 
 if __name__ == '__main__':
-    print('running')
-    #print(sample_timeline())
-    print(algorithmic_improvements())
+    print(sample_timeline())
