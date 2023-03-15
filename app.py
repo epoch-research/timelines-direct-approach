@@ -25,7 +25,7 @@ st.set_page_config(
 )
 
 
-def ci_input(label: str, timeline_func: Callable[..., Timeline], param_name: str):
+def ci_input(label: str, timeline_func: Callable[..., Timeline], param_name: str, help=None):
     distribution_ci = inspect.signature(timeline_func).parameters[param_name].default
 
     interval_width = distribution_ci.interval_width
@@ -38,7 +38,7 @@ def ci_input(label: str, timeline_func: Callable[..., Timeline], param_name: str
     with lower_bound:
         lower = st.number_input("lower", key=f'{label}_lower', value=lower_default, format='%.7g')
     with upper_bound:
-        upper = st.number_input("upper", key=f'{label}_upper', value=upper_default, format='%.7g')
+        upper = st.number_input("upper", key=f'{label}_upper', value=upper_default, format='%.7g', help=help)
 
     return DistributionCI(distribution_ci.distribution, interval_width, lower, upper)
 
@@ -70,12 +70,12 @@ with st.form("model_parameters"):
     tai_requirements_input, tai_requirements_output = st.columns(2)
     with tai_requirements_input:
         slowdown = ci_input('Slowdown', timeline.tai_requirements, 'slowdown')
-        log_k_performance = ci_input('log(k-performance)', timeline.tai_requirements, 'log_k_performance')
+        k_performance = ci_input('K-performance', timeline.tai_requirements, 'k_performance')
 
         tai_requirements = timeline.tai_requirements(
             samples=samples,
             slowdown=slowdown,
-            log_k_performance=log_k_performance,
+            k_performance=k_performance,
         )
     with tai_requirements_output:
         st.pyplot(plot_tai_requirements(tai_requirements, 'FLOPs required'))
@@ -83,9 +83,15 @@ with st.form("model_parameters"):
     st.subheader('Algorithmic progress')
     algorithmic_progress_input, algorithmic_progress_output = st.columns(2)
     with algorithmic_progress_input:
-        growth_rate = ci_input('CV growth rate', timeline.algorithmic_improvements, 'growth_rate')
-        transfer_multiplier = ci_input('Transfer multiplier', timeline.algorithmic_improvements, 'transfer_multiplier')
-        limit = ci_input('Limit multiplier', timeline.algorithmic_improvements, 'limit')
+        growth_rate = ci_input('CV growth rate', timeline.algorithmic_improvements, 'growth_rate',
+                               help='Base growth rate from the "Algorithmic Progress in Computer Vision" paper')
+        transfer_multiplier = ci_input('Transfer multiplier', timeline.algorithmic_improvements, 'transfer_multiplier',
+                                       help='What to multiply the base growth rate to account for domain transfer. This'
+                                            ' combined multiplier is constrained to be positive. (A multiplier < 1'
+                                            ' represents algorithmic regress.)')
+        limit = ci_input('Limit multiplier', timeline.algorithmic_improvements, 'limit',
+                         help='The largest multiplier possible. This is constrained to be at least 1, to account for'
+                              'the fact that we know at least the current level of performance is possible.')
 
         algorithmic_progress_timeline = timeline.algorithmic_improvements(
             samples=samples,
@@ -103,11 +109,14 @@ with st.form("model_parameters"):
         default_current_gwp = inspect.signature(timeline.spending).parameters['starting_gwp'].default
         current_gwp = st.number_input("Current GWP ($)", format='%e', value=default_current_gwp)
         default_current_max_spend = inspect.signature(timeline.spending).parameters['starting_max_spend'].default
-        current_max_spend = st.number_input("Current maximum training run spend ($)", format='%e',
-                                            value=default_current_max_spend)
-        invest_growth_rate = ci_input('Investment growth rate', timeline.spending, 'invest_growth_rate')
-        gwp_growth_rate = ci_input('GWP growth rate', timeline.spending, 'gwp_growth_rate')
-        max_gwp_pct = ci_input('Highest share of of GWP that can be spent', timeline.spending, 'max_gwp_pct')
+        current_max_spend = st.number_input("Current maximum possible training run spend ($)", format='%e',
+                                            value=default_current_max_spend, help='')
+        invest_growth_rate = ci_input('Investment growth rate', timeline.spending, 'invest_growth_rate',
+                                      help="Ben's 90% [estimate](https://epochai.org/blog/trends-in-the-dollar-training-cost-of-machine-learning-systems#appendix-i-overall-best-guess-for-the-growth-rate-in-training-cost) of 0.1 to 0.3 OOMs per year")
+        gwp_growth_rate = ci_input('GWP growth rate', timeline.spending, 'gwp_growth_rate',
+                                   help='Average of Epoch staff estimates')
+        max_gwp_pct = ci_input('Highest share of of GWP that can be spent', timeline.spending, 'max_gwp_pct',
+                               help="Ben's draft [estimate](https://docs.google.com/document/d/1vcmb4oNgGqQu8mlj9kz_NJnmJqqHzHll8O1I_siy1BY/edit?usp=sharing) (ie 0.004% to 5%)")
 
         investment_timeline = timeline.spending(
             samples=samples,
@@ -127,11 +136,14 @@ with st.form("model_parameters"):
         default_gpu_dollar_cost = inspect.signature(timeline.flops_per_dollar).parameters['gpu_dollar_cost'].default
         gpu_dollar_cost = st.number_input("GPU dollar cost ($)", format='%e', value=default_gpu_dollar_cost)
         transistors_per_core_limit = ci_input('Transistors per core limit', timeline.flops_per_dollar,
-                                              'transistors_per_core_limit')
-        process_size_limit = ci_input('Process size limit', timeline.flops_per_dollar, 'process_size_limit')
-        process_efficiency = ci_input('Process efficiency rate', timeline.flops_per_dollar, 'process_efficiency')
+                                              'transistors_per_core_limit',
+                                              help='This goes into Marius\'s projections to get a baseline.')
+        process_size_limit = ci_input('Process size limit', timeline.flops_per_dollar, 'process_size_limit',
+                                      help='This goes into Marius\'s projections to get a baseline.')
+        process_efficiency = ci_input('Process efficiency rate', timeline.flops_per_dollar, 'process_efficiency',
+                                      help='Once the rate of improvement falls below 10% per year, this kicks in.')
         hardware_specialization = ci_input('Hardware specialization rate', timeline.flops_per_dollar,
-                                           'hardware_specialization')
+                                           'hardware_specialization', help='This modifies the baseline projections')
 
         flops_per_dollar_timeline = timeline.flops_per_dollar(
             samples=samples,
