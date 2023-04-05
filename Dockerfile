@@ -1,16 +1,20 @@
-FROM ubuntu:22.04
-WORKDIR /home
+FROM python:3.11-bullseye
 
-COPY *.py .
-COPY *.txt .
-COPY data/ ./data
-RUN ls -la .
-RUN apt-get update -y
-RUN apt-get install -y software-properties-common
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN DEBIAN_FRONTEND=noninteractive apt-get install -y python3.11
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
-RUN apt-get install -y python3-pip
+EXPOSE 8000
 
-RUN pip3 install -r requirements.txt
-CMD ["streamlit", "run", "app.py"]
+WORKDIR /app
+
+RUN mkdir static
+RUN apt-get update
+RUN python -m pip install --upgrade pip
+RUN pip install pipenv
+
+COPY Pipfile Pipfile.lock ./
+RUN pipenv install --dev --system --deploy
+
+COPY blog_post.py ./
+COPY certs certs
+COPY data data
+COPY *.py ./
+
+CMD ["pipenv", "run", "uvicorn", "--host", "0.0.0.0", "--port", "8000", "--ssl-keyfile", "certs/privkey.pem", "--ssl-certfile", "certs/fullchain.pem", "blog_post:app"]

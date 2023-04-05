@@ -1,10 +1,10 @@
 import numpy as np
-import random
 import numpy.typing as npt
 from typing import Literal, Optional
 from dataclasses import dataclass
 from scipy.stats import norm
 import math
+from datetime import datetime
 
 START_YEAR = 2023
 END_YEAR = 2100
@@ -41,6 +41,14 @@ class DistributionCI:
                 return np.random.lognormal(mu, sigma, samples)
             case _:
                 raise ValueError(f"Unsupported distribution: {self.distribution}")
+
+    def params(self) -> dict:
+        return {
+            'distribution': self.distribution,
+            'interval_width': self.interval_width,
+            'interval_min': self.interval_min,
+            'interval_max': self.interval_max,
+        }
 
 
 def constrain(*, value: float, limit: float) -> float:

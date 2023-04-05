@@ -1,9 +1,9 @@
 import numpy as np
 from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain, resample_between
-from typing import List
+from typing import List, Callable
 import gpu_efficiency
 from k_performance import computation_for_k_performance
-
+import inspect
 
 def spending(
     samples: int = NUM_SAMPLES,
@@ -47,19 +47,16 @@ def flops_per_dollar(
     samples: int = NUM_SAMPLES,
     transistors_per_core_limit: DistributionCI = DistributionCI('lognormal', 70, 0.896, 1.979),
     process_size_limit: DistributionCI = DistributionCI('lognormal', 70, 1.396, 2.479),
-    process_efficiency: DistributionCI = DistributionCI('lognormal', 95, 0.005, 0.01),
-    hardware_specialization: DistributionCI = DistributionCI('lognormal', 95, 0.005, 0.01),
-    gpu_dollar_cost: int = 500,
+    hardware_specialization: DistributionCI = DistributionCI('lognormal', 90, 0.03, 0.5),
+    gpu_dollar_cost: int = 1000,  # Rough median cost of GPU with performance of between 1e13 and 1e14 FLOP/s
 ):
     """
-    General idea: Marius's projections give us a baseline projection of flops/s, which we modify with hardware
-    specialization and process efficiency. The growth rate in flops/s defines the amortization period for the GPU, which
-    then tells us the total FLOPs produced over the course of the GPU's lifetime. Then the cost of the GPU tells us
-    FLOPs/$.
+    General idea: Marius's projections give us a baseline projection of flops/s, which we modify with improvements from
+    hardware specialization. The growth rate in flops/s defines the amortization period for the GPU, which then tells us
+    the total FLOPs produced over the course of the GPU's lifetime. Then the cost of the GPU tells us FLOPs/$.
     """
     transistors_per_core_limit_samples = transistors_per_core_limit.sample(samples)
     process_size_limit_samples = process_size_limit.sample(samples)
-    process_efficiency_samples = process_efficiency.sample(samples)
     hardware_specialization_samples = hardware_specialization.sample(samples)
 
     # We use Marius's estimate to get a baseline projection, as a list of rollouts
@@ -67,23 +64,17 @@ def flops_per_dollar(
         samples, process_size_limit_samples, transistors_per_core_limit_samples
     )
 
-    # Then, we modify the baseline with hardware_specialization and process_efficiency (the latter only kicking in
-    # once the rate of improvement falls below 10% per year)
     log_flops_per_dollar = []
     for rollout_idx, rollout in enumerate(log_flops_per_second):
         log_flops_per_dollar.append([])
         cumulative_multiplier = 1
-        process_efficiency_rate = 1
-        hardware_specialization_rate = 1 + hardware_specialization_samples[rollout_idx]
         for year_offset in YEAR_OFFSETS:
-            cumulative_multiplier *= hardware_specialization_rate * process_efficiency_rate
+            # Then, we modify the baseline with hardware_specialization
+            cumulative_multiplier *= 1 + hardware_specialization_samples[rollout_idx]
             rollout[year_offset] += np.log10(cumulative_multiplier)
 
-            # check if rate of improvement has fallen below 10%, at which point we start considering process_efficiency
             # Use a reasonable, >10% growth rate for the first year
-            growth_rate = 10**(rollout[year_offset] - rollout[year_offset - 1]) - 1 if year_offset else 0.37
-            if year_offset and growth_rate < 0.1:
-                process_efficiency_rate = 1 + process_efficiency_samples[rollout_idx]
+            growth_rate = 10**(rollout[year_offset] - rollout[year_offset - 1]) - 1 if year_offset else 0.5
 
             amortization_years = 1.2 / (growth_rate + 0.1)
             amortization_seconds = 365 * 24 * 60 * 60 * amortization_years
@@ -93,7 +84,10 @@ def flops_per_dollar(
 
 
 def algorithmic_improvements(
-    growth_rate: DistributionCI = DistributionCI('normal', 95, 0.246, 2.1518),
+    # 95% CI: 4.84 months to 17.64 doubling time
+    # a 4.84 month doubling time means that 1 / (4.84 / 12) = 2.479338 doubles happen per year. 2^2.479338 = 5.576
+    # a 17.64 month doubling time means that 1 / (17.64 / 12) = 0.68027 doubles happen per year. 2^0.68027 = 1.602
+    growth_rate: DistributionCI = DistributionCI('normal', 95, 0.602, 4.576),
     transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1),
     limit: DistributionCI = DistributionCI('lognormal', 70, 1e2, 1e10),
     samples: int = NUM_SAMPLES,
@@ -159,6 +153,18 @@ def sample_timeline(
     arrivals = compute_available.T > tai_requirements(samples=samples)
 
     return np.sum(arrivals, axis=1) / samples
+
+
+def get_default_params(timeline_func: Callable[..., Timeline]):
+    param_dict = {}
+    for param_name, param_val in inspect.signature(timeline_func).parameters.items():
+        if param_name == 'samples':
+            continue
+        if isinstance(distribution_ci := param_val.default, DistributionCI):
+            param_dict[param_name] = distribution_ci.params()
+        else:
+            param_dict[param_name] = param_val.default
+    return param_dict
 
 
 if __name__ == '__main__':

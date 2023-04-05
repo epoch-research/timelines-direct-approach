@@ -14,6 +14,27 @@ def load_ndarray(name):
     return np.loadtxt(DATA_DIR + name + '.nparr.gz')
 
 
+def load_time_num_cores_perc_pred():
+    arr_names = ['time_num_cores_pred_x2_q08', 'time_num_cores_pred_x2_q085',
+                 'time_num_cores_pred_x2_q09', 'time_num_cores_pred_x2_q095']
+    return [load_ndarray(arr_name) for arr_name in arr_names]
+
+
+def get_year_start_indices(times) -> list[int]:
+    """
+    Given series of timestamps of the kind used for `X2_TIME`, return the indices which correspond to the first ts of
+    a new year. Only include years >= to start_year
+    """
+    indices = []
+    current_year = None
+    for i, ts in enumerate(times.values):
+        dt = datetime.fromtimestamp(ts[0])
+        if dt.year >= common.START_YEAR and dt.year != current_year:
+            current_year = dt.year
+            indices.append(i)
+    return indices
+
+
 DATA_DIR = 'data/'
 DATA_FILE_LOCATION = DATA_DIR + 'gpu_trends_factors_clean.csv'
 GPU_TRENDS_CLEAN = pd.read_csv(DATA_FILE_LOCATION)
@@ -36,13 +57,9 @@ X2_TIME = pd.DataFrame({
 })
 TIME_PROCESS_SIZE_PRED_X2_Q005 = load_ndarray('time_process_size_pred_x2_q005')
 TIME_NUM_TRANSISTORS_RESULTS = RegressionResults.load(DATA_DIR + 'time_num_transistors_results.pkl')
-MVP_results = RegressionResults.load(DATA_DIR + 'MVP_results.pkl')
-
-
-def load_time_num_cores_perc_pred():
-    arr_names = ['time_num_cores_pred_x2_q08', 'time_num_cores_pred_x2_q085',
-                 'time_num_cores_pred_x2_q09', 'time_num_cores_pred_x2_q095']
-    return [load_ndarray(arr_name) for arr_name in arr_names]
+YEAR_START_INDICES = get_year_start_indices(X2_TIME)
+TIME_NUM_CORES_PERC_PRED = load_time_num_cores_perc_pred()
+MVP_RESULTS = RegressionResults.load(DATA_DIR + 'MVP_results.pkl')
 
 
 def limit_process_size_constraint(time_pred, limit_in_nm):
@@ -59,21 +76,6 @@ def ratio_transistors_cores(time_transistors_pred, time_cores_pred):
 
 def cores_from_transistors_and_ratio(time_transistors, ratio):
     return np.log10(10**time_transistors / ratio)
-
-
-def get_year_start_indices(times) -> list[int]:
-    """
-    Given series of timestamps of the kind used for `X2_TIME`, return the indices which correspond to the first ts of
-    a new year. Only include years >= to start_year
-    """
-    indices = []
-    current_year = None
-    for i, ts in enumerate(times.values):
-        dt = datetime.fromtimestamp(ts[0])
-        if dt.year >= common.START_YEAR and dt.year != current_year:
-            current_year = dt.year
-            indices.append(i)
-    return indices
 
 
 def predict_FLOPs_limit(
@@ -117,8 +119,6 @@ def baseline_flops_per_second(
     lognorm_transistors_per_core_limit_samples: npt.NDArray[np.float64],
 ) -> list[list[float]]:
     """ Return list of log10 rollouts in flops per second from start_year to end_year """
-    time_num_cores_perc_pred = load_time_num_cores_perc_pred()
-    year_start_indices = get_year_start_indices(X2_TIME)
 
     max_log_flops_per_second_rollouts = []
     for i in range(num_samples):
@@ -127,7 +127,7 @@ def baseline_flops_per_second(
         limit_process_size_sample = lognorm_process_size_limit_samples[i]
         # draw percentile from 0.8, 0.85, 0.9 and 0.95
         j = np.random.randint(4, size=1)[0]
-        time_num_cores_pred_x2_q = time_num_cores_perc_pred[j]
+        time_num_cores_pred_x2_q = TIME_NUM_CORES_PERC_PRED[j]
         pred, pred_limit, pred_ratio_limit = predict_FLOPs_limit(
           limit_process_size=limit_process_size_sample,
           limit_transistors_per_core=limit_transistors_per_core_sample,
@@ -135,9 +135,9 @@ def baseline_flops_per_second(
           time_cores_pred=time_num_cores_pred_x2_q,
           num_transistors_pred_model=TIME_NUM_TRANSISTORS_RESULTS,
           time_process_size_pred=TIME_PROCESS_SIZE_PRED_X2_Q005,
-          MVP_model=MVP_results
+          MVP_model=MVP_RESULTS,
         )
-        max_log_flops_per_second_rollouts.append(list(pred.values[year_start_indices]))
+        max_log_flops_per_second_rollouts.append(list(pred.values[YEAR_START_INDICES]))
 
     # Assume a baseline in which the last year of the projection is the best we can do until the timeline model ends
     return [rollout + list(itertools.repeat(rollout[-1], (len(common.YEARS) - len(rollout))))
