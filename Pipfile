@@ -13,3 +13,4 @@ fastapi = {extras = ["all"], version = "*"}
 scipy = "*"
 statsmodels = "*"
 seaborn = "*"
+pymc = "*"

@@ -150,7 +150,6 @@ with st.form("model_parameters"):
             gpu_dollar_cost=gpu_dollar_cost,
             transistors_per_core_limit=transistors_per_core_limit,
             process_size_limit=process_size_limit,
-            process_efficiency=process_efficiency,
             hardware_specialization=hardware_specialization,
         )
         physical_flops_timeline = flops_per_dollar_timeline + investment_timeline

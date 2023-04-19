@@ -6,6 +6,7 @@ WORKDIR /app
 
 RUN mkdir static
 RUN apt-get update
+RUN apt-get install libopenblas-dev -y
 RUN python -m pip install --upgrade pip
 RUN pip install pipenv
 

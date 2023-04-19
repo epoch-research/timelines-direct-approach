@@ -1,33 +1,42 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-import numpy as np
-from fastapi.logger import logger
-from fastapi.responses import JSONResponse
-from starlette.websockets import WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import json
-import io
-from plots import plot_timeline, plot_tai_requirements, plot_tai_timeline, plot_tai_timeline_density
-import logging
 import asyncio
-from concurrent.futures import ProcessPoolExecutor
+import io
+import json
+import logging
 import multiprocessing as mp
-from queue import Empty
+import queue
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
+from typing import TypedDict, Literal
+from typing import Union
 
-import timeline
-import common
-from typing import TypedDict
 import matplotlib
+import numpy as np
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.logger import logger
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, validator, conint, confloat, ValidationError
+from starlette.websockets import WebSocket, WebSocketDisconnect
+
+import common
+import timeline
+from plots import plot_timeline, plot_tai_requirements, plot_tai_timeline, plot_tai_timeline_density
 
 matplotlib.use('AGG')
 
-TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'FLOPs required'}
-SPENDING_PLOT_PARAMS = {'y_lab': 'log10(Largest Training Run ($))'}
-ALGORITHMIC_PROGRESS_PLOT_PARAMS = {'y_lab': 'log10(Algorithmic progress multiplier)'}
-FLOPS_PER_DOLLAR_PLOT_PARAMS = {'y_lab': 'log10(FLOPs per $)'}
-PHYSICAL_FLOPS_PLOT_PARAMS = {'y_lab': 'log10(Physical FLOPs)'}
-EFFECTIVE_FLOPS_PLOT_PARAMS = {'y_lab': 'log10(Effective FLOPs)'}
+POOL = None
+
+TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over log(FLOP) required for TAI'}
+CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True,
+                                           'title': 'Cumulative distribution over log(FLOP) required for TAI'}
+SPENDING_PLOT_PARAMS = {'y_lab': 'Largest Training Run ($)'}
+ALGORITHMIC_PROGRESS_PLOT_PARAMS = {'y_lab': 'Algorithmic progress multiplier'}
+FLOPS_PER_DOLLAR_PLOT_PARAMS = {'y_lab': 'FLOP/$'}
+PHYSICAL_FLOPS_PLOT_PARAMS = {'y_lab': 'Physical FLOP'}
+EFFECTIVE_FLOPS_PLOT_PARAMS = {'y_lab': 'Effective FLOP'}
+TAI_TIMELINE_PLOT_PARAMS = {'x_lab': 'Year', 'y_lab': 'P(TAI)', 'title': 'Cumulative probability of TAI arrival'}
+TAI_TIMELINE_DENSITY_PLOT_PARAMS = {'x_lab': 'Year', 'y_lab': 'P(TAI)',  'title': 'Distribution over TAI arrival year'}
 
 DISTRIBUTION_CI_PARAM_KEYS = {'distribution', 'interval_width', 'interval_min', 'interval_max'}
 
@@ -39,22 +48,15 @@ DEFAULT_PARAMS = {
     'tai_requirements': timeline.get_default_params(timeline.tai_requirements),
 }
 
+logging.basicConfig(
+    handlers=[logging.FileHandler("timelines_backend.log"), logging.StreamHandler()],
+    format='%(asctime)s %(levelname)s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
 
-# set default logging level
-logger.setLevel(logging.DEBUG)
-logger = logging.getLogger("uvicorn.error")
+logging.getLogger('pymc').setLevel(logging.WARNING)
 
 app = FastAPI()
-
-pool = ProcessPoolExecutor()
-
-
-origins = [
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://localhost:4000",
-    "https://epoch-backend-test.web.app",
-]
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,92 +67,122 @@ app.add_middleware(
 
 
 class DistributionCIParams(TypedDict):
-    distribution: str
+    distribution: Literal["normal", "lognormal"]
     interval_width: float
     interval_min: float
     interval_max: float
 
 
-class SpendingParams(TypedDict):
+class SpendingParams(BaseModel):
     invest_growth_rate: DistributionCIParams
     gwp_growth_rate: DistributionCIParams
     max_gwp_pct: DistributionCIParams
     starting_gwp: float
-    starting_max_spend: float
+    starting_max_spend: confloat(gt=0)
+
+    @validator("invest_growth_rate", "gwp_growth_rate", pre=True)
+    def check_lower_bound_gt_neg_one(cls, value):
+        if value["interval_min"] <= -100:
+            raise ValueError("The lower bound of the interval must be > -100")
+        return value
 
 
-class FlopsPerDollarParams(TypedDict):
+class FlopsPerDollarParams(BaseModel):
     transistors_per_core_limit: DistributionCIParams
     process_size_limit: DistributionCIParams
     hardware_specialization: DistributionCIParams
-    gpu_dollar_cost: int
+    gpu_dollar_cost: conint(gt=0)
 
 
-class AlgorithmicImprovementsParams(TypedDict):
-    growth_rate: DistributionCIParams
+class AlgorithmicImprovementsParams(BaseModel):
+    algo_growth_rate: DistributionCIParams
     transfer_multiplier: DistributionCIParams
-    limit: DistributionCIParams
+    algo_limit: DistributionCIParams
+
+    @validator("algo_limit", pre=True)
+    def check_lower_bound_ge_one(cls, value):
+        if value["interval_min"] < 1:
+            raise ValueError("The lower bound of the interval must be >= 1")
+        return value
 
 
-class TAIRequirementsParams(TypedDict):
+class TAIRequirementsParams(BaseModel):
     slowdown: DistributionCIParams
     k_performance: DistributionCIParams
+    update_on_no_tai: bool
+
+    @validator("slowdown", "k_performance", pre=True)
+    def check_lower_bound_gt_zero(cls, value):
+        if value["interval_min"] <= 0:
+            raise ValueError("The lower bound of the interval must be > 0")
+        return value
 
 
-# TODO: think about constraints on values here
 class TimelineParams(BaseModel):
-    samples: int
+    samples: conint(gt=0, le=5000)
     spending: SpendingParams
     flops_per_dollar: FlopsPerDollarParams
     algorithmic_improvements: AlgorithmicImprovementsParams
     tai_requirements: TAIRequirementsParams
 
+    @validator("spending", "flops_per_dollar", "algorithmic_improvements", "tai_requirements", pre=True)
+    def check_min_less_than_max(cls, value):
+        for k, v in value.items():
+            if isinstance(v, dict) and "interval_min" in v and "interval_max" in v:
+                if v["interval_min"] > v["interval_max"]:
+                    raise ValueError(f"{k}: the lower bound for an interval must be <= the upper bound")
+                if v["interval_min"] < 0 and v["distribution"] == "lognormal":
+                    raise ValueError(f"{k}: the lower bound for a lognormal interval must be >= 0")
+        return value
+
+
+def show_pydantic_errors(errs):
+    full_msg = "There were some problems with your input:"
+    for err in errs:
+        loc = " -> ".join(err['loc'])
+        msg = err['msg']
+        if ':' in msg:
+            loc += ' -> ' + msg.split(':')[0]
+            msg = msg.split(':')[1]
+        full_msg += f"\n• {loc}: {msg}"
+    return full_msg
+
 
 @app.on_event("startup")
 async def app_startup():
+    global POOL
+    POOL = ProcessPoolExecutor()
+
+    q = queue.SimpleQueue()
+
     timeline_params = make_json_params_callable(DEFAULT_PARAMS)
+    generate_timeline_plots(timeline_params, q)
+    plots = []
+    while not q.empty():
+        plots.append(q.get())
 
-    tai_requirements = timeline.tai_requirements(**timeline_params['tai_requirements'])
-    with open('static/tai_requirements.png', 'wb') as f:
-        plot_tai_requirements(tai_requirements, **TAI_REQUIREMENTS_PLOT_PARAMS).savefig(f)
+    plot_names = ['tai_requirements', 'adjusted_tai_requirements', 'cumulative_adjusted_tai_requirements',
+                  'algorithmic_progress', 'spending', 'flops_per_dollar', 'physical_flops', 'effective_flops',
+                  'tai_timeline', 'tai_timeline_density']
 
-    algorithmic_progress_timeline = timeline.algorithmic_improvements(**timeline_params['algorithmic_improvements'])
-    with open('static/algorithmic_progress.png', 'wb') as f:
-        plot_timeline(algorithmic_progress_timeline, **ALGORITHMIC_PROGRESS_PLOT_PARAMS).savefig(f)
-
-    investment_timeline = timeline.spending(**timeline_params['spending'])
-    with open('static/spending.png', 'wb') as f:
-        plot_timeline(investment_timeline, **SPENDING_PLOT_PARAMS).savefig(f)
-
-    flops_per_dollar_timeline = timeline.flops_per_dollar(**timeline_params['flops_per_dollar'])
-    physical_flops_timeline = flops_per_dollar_timeline + investment_timeline
-    effective_compute_timeline = physical_flops_timeline + algorithmic_progress_timeline
-
-    with open('static/flops_per_dollar.png', 'wb') as f:
-        plot_timeline(flops_per_dollar_timeline, **FLOPS_PER_DOLLAR_PLOT_PARAMS).savefig(f)
-
-    with open('static/physical_flops.png', 'wb') as f:
-        plot_timeline(physical_flops_timeline, **PHYSICAL_FLOPS_PLOT_PARAMS).savefig(f)
-
-    with open('static/effective_flops.png', 'wb') as f:
-        plot_timeline(effective_compute_timeline, **EFFECTIVE_FLOPS_PLOT_PARAMS).savefig(f)
-
-    arrivals = effective_compute_timeline.T > tai_requirements
-    tai_timeline = np.sum(arrivals, axis=1) / timeline_params['samples']
-
-    with open('static/tai_timeline.png', 'wb') as f:
-        plot_tai_timeline(tai_timeline).savefig(f)
-
-    with open('static/tai_timeline_density.png', 'wb') as f:
-        plot_tai_timeline_density(arrivals).savefig(f)
+    for plot_name, plot in zip(plot_names, plots):
+        with open(f'static/{plot_name}.png', 'wb') as f:
+            f.write(plot)
 
     app.mount("/static", StaticFiles(directory="static"), name="static")
     logger.info("Static files mounted")
 
 
+@app.on_event("shutdown")
+def shutdown():
+    POOL.shutdown(wait=True)
+
+
 @app.get("/timeline-defaults")
 def get_timeline_defaults():
     content = {"defaults": DEFAULT_PARAMS}
+    # Nudge people a little bit to reduce the load
+    content['defaults']['samples'] = 200
     return JSONResponse(content=content)
 
 
@@ -162,28 +194,51 @@ def make_json_params_callable(json_params):
             v = json_params[timeline_function][k]
             if isinstance(v, dict) and set(v.keys()) == DISTRIBUTION_CI_PARAM_KEYS:
                 timeline_params[timeline_function][k] = common.DistributionCI(**v)
+            else:
+                timeline_params[timeline_function][k] = v
     return timeline_params
+
+
+@app.post("/validate-params")
+async def validate_params(req: Request):
+    params = await req.json()
+    logger.info(f'Validating {type(params)} {params}')
+    try:
+        TimelineParams.parse_obj(params)
+        logger.info('parsed params')
+        return JSONResponse(content={"valid": True})
+    except ValidationError as e:
+        logger.exception('Error validating params')
+        return JSONResponse(content={"valid": False, "error_message": show_pydantic_errors(e.errors())})
 
 
 @app.websocket("/generate-timeline")
 async def generate_timeline(websocket: WebSocket):
+    global POOL
+
     await websocket.accept()
 
-    # TODO: validate params
-    timeline_params = make_json_params_callable(json.loads(await websocket.receive_text()))
-    logger.info(timeline_params)
+    json_params = json.loads(await websocket.receive_text())
+    timeline_params = make_json_params_callable(json_params)
+    logger.info(f'Calculating with {json_params}')
 
     loop = asyncio.get_event_loop()
     manager = mp.Manager()
-    queue = manager.Queue()
+    q = manager.Queue()
 
-    generate_timeline_process = loop.run_in_executor(pool, generate_timeline_plots, timeline_params, queue)
+    try:
+        generate_timeline_process = loop.run_in_executor(POOL, generate_timeline_plots, timeline_params, q)
+    except BrokenProcessPool:
+        logger.error('Process pool is broken. Restarting executor.')
+        POOL.shutdown(wait=True)
+        POOL = ProcessPoolExecutor()
+        raise
+
     while True:
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.1)
         try:
-            plot_fig = queue.get(block=False)
-            await websocket.send_bytes(plot_fig)
-        except Empty:
+            await websocket.send_bytes(q.get(block=False))
+        except queue.Empty:
             pass
         except WebSocketDisconnect:
             generate_timeline_process.cancel()
@@ -197,53 +252,46 @@ async def generate_timeline(websocket: WebSocket):
     # Clear the queue
     while True:
         try:
-            plot_fig = queue.get(block=False)
-            await websocket.send_bytes(plot_fig)
-        except Empty:
+            await websocket.send_bytes(q.get(block=False))
+        except queue.Empty:
             break
 
     await websocket.close()
 
 
-def generate_timeline_plots(timeline_params, queue):
-    tai_requirements = timeline.tai_requirements(**timeline_params['tai_requirements'])
+def put_plot(fig: matplotlib.figure.Figure, q: Union[queue.SimpleQueue, mp.Queue]):
     with io.BytesIO() as f:
-        plot_tai_requirements(tai_requirements, **TAI_REQUIREMENTS_PLOT_PARAMS).savefig(f)
-        queue.put(f.getvalue())
+        fig.savefig(f)
+        q.put(f.getvalue())
+    matplotlib.pyplot.close(fig)
+
+
+def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queue]):
+    tai_requirements, adjusted_tai_requirements = timeline.tai_requirements(**{**timeline_params['tai_requirements'],
+                                                                               'update_on_no_tai': True})
+    put_plot(plot_tai_requirements(tai_requirements, **TAI_REQUIREMENTS_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements(adjusted_tai_requirements, **TAI_REQUIREMENTS_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements(adjusted_tai_requirements, **CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS), q)
+
+    if timeline_params['tai_requirements']['update_on_no_tai']:
+        tai_requirements = adjusted_tai_requirements
 
     algorithmic_progress_timeline = timeline.algorithmic_improvements(**timeline_params['algorithmic_improvements'])
-    with io.BytesIO() as f:
-        plot_timeline(algorithmic_progress_timeline, **ALGORITHMIC_PROGRESS_PLOT_PARAMS).savefig(f)
-        queue.put(f.getvalue())
+    put_plot(plot_timeline(algorithmic_progress_timeline, **ALGORITHMIC_PROGRESS_PLOT_PARAMS), q)
 
     investment_timeline = timeline.spending(**timeline_params['spending'])
-    with io.BytesIO() as f:
-        plot_timeline(investment_timeline, **SPENDING_PLOT_PARAMS).savefig(f)
-        queue.put(f.getvalue())
+    put_plot(plot_timeline(investment_timeline, **SPENDING_PLOT_PARAMS), q)
 
     flops_per_dollar_timeline = timeline.flops_per_dollar(**timeline_params['flops_per_dollar'])
     physical_flops_timeline = flops_per_dollar_timeline + investment_timeline
     effective_compute_timeline = physical_flops_timeline + algorithmic_progress_timeline
 
-    with io.BytesIO() as f:
-        plot_timeline(flops_per_dollar_timeline, **FLOPS_PER_DOLLAR_PLOT_PARAMS).savefig(f)
-        queue.put(f.getvalue())
-
-    with io.BytesIO() as f:
-        plot_timeline(physical_flops_timeline, **PHYSICAL_FLOPS_PLOT_PARAMS).savefig(f)
-        queue.put(f.getvalue())
-
-    with io.BytesIO() as f:
-        plot_timeline(effective_compute_timeline, **EFFECTIVE_FLOPS_PLOT_PARAMS).savefig(f)
-        queue.put(f.getvalue())
+    put_plot(plot_timeline(flops_per_dollar_timeline, **FLOPS_PER_DOLLAR_PLOT_PARAMS), q)
+    put_plot(plot_timeline(physical_flops_timeline, **PHYSICAL_FLOPS_PLOT_PARAMS), q)
+    put_plot(plot_timeline(effective_compute_timeline, **EFFECTIVE_FLOPS_PLOT_PARAMS), q)
 
     arrivals = effective_compute_timeline.T > tai_requirements
     tai_timeline = np.sum(arrivals, axis=1) / timeline_params['samples']
 
-    with io.BytesIO() as f:
-        plot_tai_timeline(tai_timeline).savefig(f)
-        queue.put(f.getvalue())
-
-    with io.BytesIO() as f:
-        plot_tai_timeline_density(arrivals).savefig(f)
-        queue.put(f.getvalue())
+    put_plot(plot_tai_timeline(tai_timeline, **TAI_TIMELINE_PLOT_PARAMS), q)
+    put_plot(plot_tai_timeline_density(arrivals, **TAI_TIMELINE_DENSITY_PLOT_PARAMS), q)

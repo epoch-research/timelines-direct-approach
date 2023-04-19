@@ -1,13 +1,15 @@
+import itertools
+
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
-import numpy as np
-import itertools
+from matplotlib.figure import Figure
 
 import common
 
 
-def plot_timeline(tl: common.Timeline, y_lab: str, errorbar_interval: int = 95):
+def plot_timeline(tl: common.Timeline, y_lab: str, errorbar_interval: int = 95) -> Figure:
     plot_fig, plot_ax = plt.subplots()
 
     rotated = np.vstack([np.array(list(zip(itertools.repeat(idx + common.START_YEAR), tl[:, idx])))
@@ -21,30 +23,39 @@ def plot_timeline(tl: common.Timeline, y_lab: str, errorbar_interval: int = 95):
     return plot_fig
 
 
-def plot_tai_timeline(tai_timeline):
+def plot_tai_timeline(tai_timeline, x_lab: str, y_lab: str, title: str) -> Figure:
     # TODO: take the raw arrival yes/nos, convert to a beta distribution for each year, use that to plot uncertainty?
     plot_fig, plot_ax = plt.subplots()
 
     sns.lineplot(pd.DataFrame({
         'Year': np.arange(common.START_YEAR, common.END_YEAR),
         'P(TAI)': tai_timeline,
-    }), x='Year', y='P(TAI)', ax=plot_ax)
+    }), x=x_lab, y=y_lab, ax=plot_ax)
+
+    plot_ax.set_title(title)
 
     return plot_fig
 
 
-def plot_tai_timeline_density(arrivals):
+def plot_tai_timeline_density(arrivals, x_lab: str, y_lab: str, title: str) -> Figure:
     arrival_counts = list(np.sum(arrivals, axis=1))
     new_arrivals = [cur - prev for prev, cur in zip([0] + arrival_counts, arrival_counts)]
     arrival_years = [year for year, count in zip(common.YEARS, new_arrivals) for _ in range(count)]
 
     plot_fig, plot_ax = plt.subplots()
     sns.histplot(arrival_years, kde=True, ax=plot_ax, stat='probability', binwidth=1)
+    plot_ax.set_xlabel(x_lab)
+    plot_ax.set_ylabel(y_lab)
+    plot_ax.set_title(title)
 
     return plot_fig
 
 
-def plot_tai_requirements(tai_requirements: common.Distribution, x_lab: str):
-    g = sns.displot(tai_requirements, kde=True)
-    g.set_xlabels(x_lab)
-    return g
+def plot_tai_requirements(tai_requirements: common.Distribution, x_lab: str,
+                          title: str, cumulative: bool = False) -> Figure:
+    plot_fig, plot_ax = plt.subplots()
+    sns.histplot(tai_requirements, kde=True, ax=plot_ax, stat='probability', binwidth=1, cumulative=cumulative)
+    plot_ax.set_xlabel(x_lab)
+    plot_ax.set_title(title)
+
+    return plot_fig

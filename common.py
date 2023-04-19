@@ -1,16 +1,16 @@
+import sys
+
 import numpy as np
 import numpy.typing as npt
 from typing import Literal, Optional
-from dataclasses import dataclass
 from scipy.stats import norm
 import math
-from datetime import datetime
 
 START_YEAR = 2023
 END_YEAR = 2100
 YEARS = list(range(START_YEAR, END_YEAR))
 YEAR_OFFSETS = list(range(END_YEAR - START_YEAR))
-NUM_SAMPLES = 10_000
+NUM_SAMPLES = 6_000
 
 # Types
 Year = int
@@ -21,26 +21,40 @@ Rollout = npt.NDArray[np.float64]  # shape: (years,)
 Timeline = npt.NDArray[np.float64]
 
 
-@dataclass
 class DistributionCI:
-    distribution: DistributionName
-    interval_width: float
-    interval_min: float
-    interval_max: float
+    def __init__(self, distribution: DistributionName, interval_width: float, interval_min: float, interval_max: float):
+        assert interval_min <= interval_max, 'interval_min must be less than or equal to interval_max'
+        assert distribution in ('normal', 'lognormal'), 'Unsupported distribution'
+
+        self.distribution = distribution
+        self.interval_width = interval_width
+        self.interval_min = interval_min
+        self.interval_max = interval_max
+
+        if distribution == 'lognormal' and interval_min == 0.0 and isinstance(interval_min, float):
+            self.interval_min = sys.float_info.epsilon
+
+    def mu(self):
+        match self.distribution:
+            case 'normal':
+                return (self.interval_min + self.interval_max) / 2
+            case 'lognormal':
+                return (np.log(self.interval_min) + np.log(self.interval_max)) / 2
+
+    def sigma(self):
+        match self.distribution:
+            case 'normal':
+                return (self.mu() - self.interval_min) / norm.interval(self.interval_width / 100)[1]
+            case 'lognormal':
+                return (self.mu() - np.log(self.interval_min)) / norm.interval(self.interval_width / 100)[1]
 
     def sample(self, samples: int) -> npt.NDArray[np.float64]:
         assert 0 < self.interval_width < 100, 'interval_width must be a positive number representing a confidence interval'
         match self.distribution:
             case 'normal':
-                mu = (self.interval_min + self.interval_max) / 2
-                sigma = (mu - self.interval_min) / norm.interval(self.interval_width / 100)[1]
-                return np.random.normal(mu, sigma, samples)
+                return np.random.normal(self.mu(), self.sigma(), samples)
             case 'lognormal':
-                mu = (np.log(self.interval_min) + np.log(self.interval_max)) / 2
-                sigma = (mu - np.log(self.interval_min)) / norm.interval(self.interval_width / 100)[1]
-                return np.random.lognormal(mu, sigma, samples)
-            case _:
-                raise ValueError(f"Unsupported distribution: {self.distribution}")
+                return np.random.lognormal(self.mu(), self.sigma(), samples)
 
     def params(self) -> dict:
         return {
@@ -49,6 +63,15 @@ class DistributionCI:
             'interval_min': self.interval_min,
             'interval_max': self.interval_max,
         }
+
+    def change_width(self, new_width: float = 80) -> 'DistributionCI':
+        margin = norm.ppf((1 + new_width / 100) / 2) * self.sigma()
+        match self.distribution:
+            case 'normal':
+                return DistributionCI(self.distribution, new_width, self.mu() - margin, self.mu() + margin)
+            case 'lognormal':
+                return DistributionCI(self.distribution, new_width,
+                                      np.exp(self.mu() - margin), np.exp(self.mu() + margin))
 
 
 def constrain(*, value: float, limit: float) -> float:

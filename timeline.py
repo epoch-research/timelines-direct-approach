@@ -1,21 +1,26 @@
-import numpy as np
-from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain, resample_between
-from typing import List, Callable
-import gpu_efficiency
-from k_performance import computation_for_k_performance
 import inspect
+import pymc as pm
+from typing import List, Callable, Union
+
+import numpy as np
+from scipy.stats import norm
+
+import gpu_efficiency
+from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain, resample_between
+from k_performance import computation_for_k_performance
+
 
 def spending(
     samples: int = NUM_SAMPLES,
     # from Ben's estimate of 0.1 to 0.3 OOMs per year in https://epochai.org/blog/trends-in-the-dollar-training-cost-of-machine-learning-systems#appendix-i-overall-best-guess-for-the-growth-rate-in-training-cost:~:text=my%20all%2Dthings%2Dconsidered%20view%20is%200.2%20OOMs/year%20(90%25%20CI%3A%200.1%20to%200.3%20OOMs/year
-    # Epoch staff aggregate: DistributionCI('normal', 70, 1.1480341, 3.278781)
-    invest_growth_rate: DistributionCI = DistributionCI('normal', 90, 0.2589254117941673, 0.9952623149688795),
-    # average of Epoch staff estimates
-    gwp_growth_rate: DistributionCI = DistributionCI('normal', 70, 0.004, 0.034),
+    # For ref: Epoch staff aggregate: DistributionCI('normal', 70, 1.1480341, 3.278781)
+    invest_growth_rate: DistributionCI = DistributionCI('normal', 90, 25.9, 99.5).change_width(),
+    gwp_growth_rate: DistributionCI = DistributionCI('normal', 80, 0.4, 3.4).change_width(),
     # Ben's estimate (ie 0.004% to 5%) (Matthew's estimate: DistributionCI('lognormal', 70, 0.0000083, 0.014047))
-    max_gwp_pct: DistributionCI = DistributionCI('lognormal', 95, 0.00004, 0.05),
+    max_gwp_pct: DistributionCI = DistributionCI('lognormal', 95, 0.004, 5).change_width(),
     starting_gwp: float = 1.17e14,
-    starting_max_spend: float = 2e7,
+    # Take 6.1e7 for GPT-4 and increase by 0.2 OOMs. Use millions here to make it easier for users to enter values
+    starting_max_spend: float = 98,
 ) -> Timeline:
     """
     We assume that the current maximum amount people are willing to spend on a training run is $2e7, which will grow at
@@ -23,32 +28,32 @@ def spending(
     (`gwp_growth_rate`).
     """
     # The growth rate can be negative, but the multiplier needs to be positive
-    invest_growth_multiplier_samples = np.log10(resample_between(1 + invest_growth_rate.sample(samples), min=0))
-    max_gwp_pct_samples = np.log10(max_gwp_pct.sample(samples))
+    invest_growth_multiplier_samples = np.log10(resample_between(1 + (invest_growth_rate.sample(samples) / 100), min=0))
+    max_gwp_pct_samples = np.log10(max_gwp_pct.sample(samples) / 100)
     # Again, the growth rate can be negative, but the multiplier needs to be positive
-    gwp_growth_multiplier_samples = np.log10(resample_between(1 + gwp_growth_rate.sample(samples), min=0))
+    gwp_growth_multiplier_samples = np.log10(resample_between(1 + (gwp_growth_rate.sample(samples) / 100), min=0))
 
     spending_rollouts = []
     for i in range(samples):
         spending_rollouts.append([])
         gwp = np.log10(starting_gwp)
-        max_spend = np.log10(starting_max_spend)
+        max_spend = np.log10(starting_max_spend * 1e6)  # convert to millions
         for _ in YEAR_OFFSETS:
             max_spend += invest_growth_multiplier_samples[i]
             gwp += gwp_growth_multiplier_samples[i]
             dollar_limit = gwp + max_gwp_pct_samples[i]
             constrained = constrain(value=10**max_spend, limit=10**dollar_limit)
-            spending_rollouts[i].append(np.log10(max(1e-10, constrained)))  # TODO: hack
+            spending_rollouts[i].append(np.log10(max(1e-10, constrained)))
 
     return np.stack(spending_rollouts)
 
 
 def flops_per_dollar(
     samples: int = NUM_SAMPLES,
-    transistors_per_core_limit: DistributionCI = DistributionCI('lognormal', 70, 0.896, 1.979),
-    process_size_limit: DistributionCI = DistributionCI('lognormal', 70, 1.396, 2.479),
-    hardware_specialization: DistributionCI = DistributionCI('lognormal', 90, 0.03, 0.5),
-    gpu_dollar_cost: int = 1000,  # Rough median cost of GPU with performance of between 1e13 and 1e14 FLOP/s
+    transistors_per_core_limit: DistributionCI = DistributionCI('lognormal', 70, 0.896, 1.98).change_width(),
+    process_size_limit: DistributionCI = DistributionCI('lognormal', 70, 1.4, 2.48).change_width(),
+    hardware_specialization: DistributionCI = DistributionCI('lognormal', 90, 3, 50).change_width(),
+    gpu_dollar_cost: int = 1000,  # Rough median cost of GPU with performance of between 1e13 and 1e14 FLOP/s (Marius's projections are ~roughly 1e13.5)
 ):
     """
     General idea: Marius's projections give us a baseline projection of flops/s, which we modify with improvements from
@@ -57,7 +62,7 @@ def flops_per_dollar(
     """
     transistors_per_core_limit_samples = transistors_per_core_limit.sample(samples)
     process_size_limit_samples = process_size_limit.sample(samples)
-    hardware_specialization_samples = hardware_specialization.sample(samples)
+    hardware_specialization_samples = hardware_specialization.sample(samples) / 100
 
     # We use Marius's estimate to get a baseline projection, as a list of rollouts
     log_flops_per_second: List[List[float]] = gpu_efficiency.baseline_flops_per_second(
@@ -84,18 +89,16 @@ def flops_per_dollar(
 
 
 def algorithmic_improvements(
-    # 95% CI: 4.84 months to 17.64 doubling time
-    # a 4.84 month doubling time means that 1 / (4.84 / 12) = 2.479338 doubles happen per year. 2^2.479338 = 5.576
-    # a 17.64 month doubling time means that 1 / (17.64 / 12) = 0.68027 doubles happen per year. 2^0.68027 = 1.602
-    growth_rate: DistributionCI = DistributionCI('normal', 95, 0.602, 4.576),
-    transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1),
-    limit: DistributionCI = DistributionCI('lognormal', 70, 1e2, 1e10),
+    # 95% CI: [4.84 months, 17.63 months]. Multipliers: [1.3225601461225394, 2.7686192570674697]
+    algo_growth_rate: DistributionCI = DistributionCI('normal', 95, 32.256015, 176.686193).change_width(),
+    transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1).change_width(),
+    algo_limit: DistributionCI = DistributionCI('lognormal', 70, 1e2, 1e10).change_width(),
     samples: int = NUM_SAMPLES,
 ):
     """
     Three components:
-    - Base growth rate, from the "Algorithmic Progress in Computer Vision" paper gives us 100.96% each year, 95% CI is
-    [24.60%, 215.18%]. We could combine this with Anson's findings on algo progress in LMs, if that becomes available.
+    - Base growth rate, from the "Algorithmic Progress in Computer Vision" paper, and Anson's data on algo progress in
+    LMs
     - Domain transfer multiplier: how much we should modify the rate to account for algorithmic progress being a
     different domain.
     - Limit: at what multiplier does algorithmic growth stop?
@@ -106,11 +109,11 @@ def algorithmic_improvements(
     transfer_multiplier_samples = transfer_multiplier.sample(samples)
     # Algorithmic regress is possible (due to regulation, knowledge loss, eg), which is represented by a multiplier
     # between 0 and 1. But a negative rate is not possible.
-    growth_multiplier_samples = 1 + (growth_rate.sample(samples) * transfer_multiplier_samples)
+    growth_multiplier_samples = 1 + (algo_growth_rate.sample(samples) / 100 * transfer_multiplier_samples)
     growth_multiplier_samples = resample_between(growth_multiplier_samples, min=0)
     # On the other hand, current performance means that we know the lower limit for the multiplier is at least 1, so we
     # do enforce that
-    limit_samples = np.log10(resample_between(limit.sample(samples), min=1))
+    limit_samples = np.log10(resample_between(algo_limit.sample(samples), min=1))
 
     algorithmic_improvement = []
     for rollout in range(samples):
@@ -118,23 +121,24 @@ def algorithmic_improvements(
         current_improvement = 0
         for _ in YEAR_OFFSETS:
             current_improvement += np.log10(growth_multiplier_samples[rollout])
-            constrained = np.log10(constrain(value=10**current_improvement, limit=10**limit_samples[rollout]))
-            algorithmic_improvement[rollout].append(max(constrained, 1e-10))  # TODO: hack
+            # Ensure the input to log isn't literally zero, which it can be sometimes, due to FP approximations when
+            # the `value` is sufficently small compared to the `limit`
+            constrained = max(1e-10, constrain(value=10**current_improvement, limit=10**limit_samples[rollout]))
+            algorithmic_improvement[rollout].append(np.log10(constrained))
 
     return np.stack(algorithmic_improvement)
 
 
 def tai_requirements(
     samples: int = NUM_SAMPLES,
-    slowdown: DistributionCI = DistributionCI('lognormal', 70, 9.85, 289.05),
-    k_performance: DistributionCI = DistributionCI('lognormal', 70, 3129, 141714),
-) -> Distribution:
+    slowdown: DistributionCI = DistributionCI('lognormal', 70, 9.85, 289).change_width(),
+    k_performance: DistributionCI = DistributionCI('lognormal', 70, 3130, 14200).change_width(),
+    update_on_no_tai: bool = True,
+) -> Union[tuple[Distribution, Distribution], Distribution]:
     """
     User specifies:
     - slowdown: the degree to which the human judge will update slower than the ideal predictor.
     - k_performance: the length of the transformative task
-
-    TODO: should we start incorporating uncertainty over the A,B,alpha,beta params?
     """
     slowdown_samples = slowdown.sample(samples)
     k_performance_samples = k_performance.sample(samples)
@@ -143,7 +147,33 @@ def tai_requirements(
     for i in range(len(slowdown_samples)):
         c = computation_for_k_performance(k_performance_samples[i], slowdown_samples[i])
         log_flops_needed_sample.append(c)
-    return np.array(log_flops_needed_sample)
+
+    log_flops_needed_sample = np.array(log_flops_needed_sample)
+
+    if not update_on_no_tai:
+        return log_flops_needed_sample
+
+    compute_mu, compute_std = norm.fit(log_flops_needed_sample)
+
+    training_runs = [(np.log10(1e17), 8), (np.log10(1e23), 2), (np.log10(1e25), 1)]
+
+    basic_model = pm.Model()
+    with basic_model:
+        # compute requirements at which it takes 1 year to produce AGI in expectation
+        compute_req_oom = pm.Normal("compute_req_oom", mu=compute_mu, sigma=compute_std)
+        decay_exponent = 0.3
+
+        i = 1
+        for pair in training_runs:
+            (run_size, duration) = pair
+            poisson_mean = 10 ** (decay_exponent * (run_size - compute_req_oom))
+            agi_arrived = pm.Poisson("agi_arrived_" + str(i), mu=poisson_mean * duration, observed=0)
+            i += 1
+
+    with basic_model:
+        idata = pm.sample(draws=samples, tune=2000, cores=1, target_accept=0.99, progressbar=False)
+
+    return log_flops_needed_sample, idata.posterior["compute_req_oom"].values[0]
 
 
 def sample_timeline(
@@ -165,7 +195,3 @@ def get_default_params(timeline_func: Callable[..., Timeline]):
         else:
             param_dict[param_name] = param_val.default
     return param_dict
-
-
-if __name__ == '__main__':
-    print(sample_timeline())
