@@ -15,6 +15,7 @@ def spending(
     # from Ben's estimate of 0.1 to 0.3 OOMs per year in https://epochai.org/blog/trends-in-the-dollar-training-cost-of-machine-learning-systems#appendix-i-overall-best-guess-for-the-growth-rate-in-training-cost:~:text=my%20all%2Dthings%2Dconsidered%20view%20is%200.2%20OOMs/year%20(90%25%20CI%3A%200.1%20to%200.3%20OOMs/year
     # For ref: Epoch staff aggregate: DistributionCI('normal', 70, 1.1480341, 3.278781)
     invest_growth_rate: DistributionCI = DistributionCI('normal', 90, 25.9, 99.5).change_width(),
+    # 116_639_700 in 2023 -> 237_830_800 in 2060 -> 1.9% per year
     gwp_growth_rate: DistributionCI = DistributionCI('normal', 80, 0.4, 3.4).change_width(),
     # Ben's estimate (ie 0.004% to 5%) (Matthew's estimate: DistributionCI('lognormal', 70, 0.0000083, 0.014047))
     max_gwp_pct: DistributionCI = DistributionCI('lognormal', 95, 0.004, 5).change_width(),
@@ -53,7 +54,8 @@ def flops_per_dollar(
     transistors_per_core_limit: DistributionCI = DistributionCI('lognormal', 70, 0.896, 1.98).change_width(),
     process_size_limit: DistributionCI = DistributionCI('lognormal', 70, 1.4, 2.48).change_width(),
     hardware_specialization: DistributionCI = DistributionCI('lognormal', 90, 3, 50).change_width(),
-    gpu_dollar_cost: int = 1000,  # Rough median cost of GPU with performance of between 1e13 and 1e14 FLOP/s (Marius's projections are ~roughly 1e13.5)
+    # Rough median cost of GPU with performance of between 1e13 and 1e14 FLOP/s (Projections are ~1e13.5 in 2023)
+    gpu_dollar_cost: int = 1000,
 ):
     """
     General idea: Marius's projections give us a baseline projection of flops/s, which we modify with improvements from
@@ -89,16 +91,14 @@ def flops_per_dollar(
 
 
 def algorithmic_improvements(
-    # 95% CI: [4.84 months, 17.63 months]. Multipliers: [1.3225601461225394, 2.7686192570674697]
-    algo_growth_rate: DistributionCI = DistributionCI('normal', 95, 32.256015, 176.686193).change_width(),
+    algo_growth_rate: DistributionCI = DistributionCI('normal', 95, 24.6, 215.18).change_width(),
     transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1).change_width(),
     algo_limit: DistributionCI = DistributionCI('lognormal', 70, 1e2, 1e10).change_width(),
     samples: int = NUM_SAMPLES,
 ):
     """
     Three components:
-    - Base growth rate, from the "Algorithmic Progress in Computer Vision" paper, and Anson's data on algo progress in
-    LMs
+    - Base growth rate, from the "Algorithmic Progress in Computer Vision" paper
     - Domain transfer multiplier: how much we should modify the rate to account for algorithmic progress being a
     different domain.
     - Limit: at what multiplier does algorithmic growth stop?
@@ -131,8 +131,8 @@ def algorithmic_improvements(
 
 def tai_requirements(
     samples: int = NUM_SAMPLES,
-    slowdown: DistributionCI = DistributionCI('lognormal', 70, 9.85, 289).change_width(),
-    k_performance: DistributionCI = DistributionCI('lognormal', 70, 3130, 14200).change_width(),
+    slowdown: DistributionCI = DistributionCI('lognormal', 70, 9.84, 290).change_width(),
+    k_performance: DistributionCI = DistributionCI('lognormal', 70, 3129, 14220).change_width(),
     update_on_no_tai: bool = True,
 ) -> Union[tuple[Distribution, Distribution], Distribution]:
     """
@@ -180,7 +180,7 @@ def sample_timeline(
     samples: int = NUM_SAMPLES,
 ):
     compute_available = spending(samples=samples) + flops_per_dollar(samples=samples) + algorithmic_improvements(samples=samples)
-    arrivals = compute_available.T > tai_requirements(samples=samples)
+    arrivals = compute_available.T > tai_requirements(samples=samples)[1]
 
     return np.sum(arrivals, axis=1) / samples
 
