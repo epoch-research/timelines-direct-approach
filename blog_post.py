@@ -119,7 +119,7 @@ class TAIRequirementsParams(BaseModel):
 
 
 class TimelineParams(BaseModel):
-    samples: conint(gt=0, le=5000)
+    samples: conint(gt=0, le=5000, strict=True)
     spending: SpendingParams
     flops_per_dollar: FlopsPerDollarParams
     algorithmic_improvements: AlgorithmicImprovementsParams
