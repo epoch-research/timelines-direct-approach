@@ -20,8 +20,8 @@ def spending(
     # Ben's estimate (ie 0.004% to 5%) (Matthew's estimate: DistributionCI('lognormal', 70, 0.0000083, 0.014047))
     max_gwp_pct: DistributionCI = DistributionCI('lognormal', 95, 0.004, 5).change_width(),
     starting_gwp: float = 1.17e14,
-    # Take 6.1e7 for GPT-4 and increase by 0.2 OOMs. Use millions here to make it easier for users to enter values
-    starting_max_spend: float = 98,
+    # Take 43 million for GPT-4 and increase by 0.2 OOMs. Use millions here to make it easier for users to enter values
+    starting_max_spend: float = 4.3 * 10**0.2,
 ) -> Timeline:
     """
     We assume that the current maximum amount people are willing to spend on a training run is $2e7, which will grow at
@@ -90,8 +90,8 @@ def flops_per_dollar(
 
 
 def algorithmic_improvements(
-    # (24.6, 215.18) in percentages becomes (0.0955, 2.4986) in OOMs
-    algo_growth_rate: DistributionCI = DistributionCI('normal', 95, 0.0955, 2.4986).change_width(),
+    # (24.6, 215.18) in percentages, converted to OOMs
+    algo_growth_rate: DistributionCI = DistributionCI('normal', 95, np.log10(1.246), np.log10(315.18)).change_width(),
     transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1).change_width(),
     algo_limit: DistributionCI = DistributionCI('lognormal', 70, 2, 10).change_width(),  # expressed in OOMs
     samples: int = NUM_SAMPLES,
@@ -127,7 +127,7 @@ def algorithmic_improvements(
 def tai_requirements(
     samples: int = NUM_SAMPLES,
     slowdown: DistributionCI = DistributionCI('lognormal', 70, 9.84, 290).change_width(),
-    k_performance: DistributionCI = DistributionCI('lognormal', 70, 3129, 14220).change_width(),
+    k_performance: DistributionCI = DistributionCI('lognormal', 70, 3129, 141714).change_width(),
     update_on_no_tai: bool = True,
 ) -> Union[tuple[Distribution, Distribution], Distribution]:
     """
