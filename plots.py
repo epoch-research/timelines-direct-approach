@@ -9,14 +9,14 @@ from matplotlib.figure import Figure
 import common
 
 
-def plot_timeline(tl: common.Timeline, y_lab: str, errorbar_interval: int = 95) -> Figure:
+def plot_timeline(tl: common.Timeline, y_lab: str, errorbar_interval: int = 90) -> Figure:
     plot_fig, plot_ax = plt.subplots()
 
     rotated = np.vstack([np.array(list(zip(itertools.repeat(idx + common.START_YEAR), tl[:, idx])))
                          for idx in common.YEAR_OFFSETS])
     df = pd.DataFrame({
         'Year': rotated[:, 0],
-        y_lab: 10 ** rotated[:, 1]
+        y_lab: 10**rotated[:, 1]
     })
     sns.lineplot(df, x='Year', y=y_lab, errorbar=('pi', errorbar_interval), estimator='median', ax=plot_ax)
     plot_ax.set_yscale('log')

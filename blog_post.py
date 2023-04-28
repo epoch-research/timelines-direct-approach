@@ -99,10 +99,16 @@ class AlgorithmicImprovementsParams(BaseModel):
     transfer_multiplier: DistributionCIParams
     algo_limit: DistributionCIParams
 
+    @validator("transfer_multiplier", pre=True)
+    def check_lower_bound_ge_zero(cls, value):
+        if value["interval_min"] <= 0:
+            raise ValueError("The lower bound of the interval must be > 0")
+        return value
+
     @validator("algo_limit", pre=True)
-    def check_lower_bound_ge_one(cls, value):
-        if value["interval_min"] < 1:
-            raise ValueError("The lower bound of the interval must be >= 1")
+    def check_lower_bound_ge_zero(cls, value):
+        if value["interval_min"] < 0:
+            raise ValueError("The lower bound of the interval must be >= 0")
         return value
 
 

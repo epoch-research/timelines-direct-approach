@@ -43,7 +43,7 @@ def spending(
             max_spend += invest_growth_multiplier_samples[i]
             gwp += gwp_growth_multiplier_samples[i]
             dollar_limit = gwp + max_gwp_pct_samples[i]
-            constrained = constrain(value=10**max_spend, limit=10**dollar_limit)
+            constrained = constrain(value=max_spend, limit=dollar_limit)
             spending_rollouts[i].append(np.log10(max(1e-10, constrained)))
 
     return np.stack(spending_rollouts)
@@ -53,7 +53,8 @@ def flops_per_dollar(
     samples: int = NUM_SAMPLES,
     transistors_per_core_limit: DistributionCI = DistributionCI('lognormal', 70, 0.896, 1.98).change_width(),
     process_size_limit: DistributionCI = DistributionCI('lognormal', 70, 1.4, 2.48).change_width(),
-    hardware_specialization: DistributionCI = DistributionCI('lognormal', 90, 3, 50).change_width(),
+    # expressed in OOMs
+    hardware_specialization: DistributionCI = DistributionCI('lognormal', 90, 0.013, 0.176).change_width(),
     # Rough median cost of GPU with performance of between 1e13 and 1e14 FLOP/s (Projections are ~1e13.5 in 2023)
     gpu_dollar_cost: int = 1000,
 ):
@@ -64,7 +65,7 @@ def flops_per_dollar(
     """
     transistors_per_core_limit_samples = transistors_per_core_limit.sample(samples)
     process_size_limit_samples = process_size_limit.sample(samples)
-    hardware_specialization_samples = hardware_specialization.sample(samples) / 100
+    hardware_specialization_samples = hardware_specialization.sample(samples)
 
     # We use Marius's estimate to get a baseline projection, as a list of rollouts
     log_flops_per_second: List[List[float]] = gpu_efficiency.baseline_flops_per_second(
@@ -74,11 +75,9 @@ def flops_per_dollar(
     log_flops_per_dollar = []
     for rollout_idx, rollout in enumerate(log_flops_per_second):
         log_flops_per_dollar.append([])
-        cumulative_multiplier = 1
         for year_offset in YEAR_OFFSETS:
             # Then, we modify the baseline with hardware_specialization
-            cumulative_multiplier *= 1 + hardware_specialization_samples[rollout_idx]
-            rollout[year_offset] += np.log10(cumulative_multiplier)
+            rollout[year_offset] += (year_offset + 1) * hardware_specialization_samples[rollout_idx]
 
             # Use a reasonable, >10% growth rate for the first year
             growth_rate = 10**(rollout[year_offset] - rollout[year_offset - 1]) - 1 if year_offset else 0.5
@@ -91,9 +90,10 @@ def flops_per_dollar(
 
 
 def algorithmic_improvements(
-    algo_growth_rate: DistributionCI = DistributionCI('normal', 95, 24.6, 215.18).change_width(),
+    # (24.6, 215.18) in percentages becomes (0.0955, 2.4986) in OOMs
+    algo_growth_rate: DistributionCI = DistributionCI('normal', 95, 0.0955, 2.4986).change_width(),
     transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1).change_width(),
-    algo_limit: DistributionCI = DistributionCI('lognormal', 70, 1e2, 1e10).change_width(),
+    algo_limit: DistributionCI = DistributionCI('lognormal', 70, 2, 10).change_width(),  # expressed in OOMs
     samples: int = NUM_SAMPLES,
 ):
     """
@@ -107,23 +107,18 @@ def algorithmic_improvements(
     compute by to get effective compute
     """
     transfer_multiplier_samples = transfer_multiplier.sample(samples)
-    # Algorithmic regress is possible (due to regulation, knowledge loss, eg), which is represented by a multiplier
-    # between 0 and 1. But a negative rate is not possible.
-    growth_multiplier_samples = 1 + (algo_growth_rate.sample(samples) / 100 * transfer_multiplier_samples)
-    growth_multiplier_samples = resample_between(growth_multiplier_samples, min=0)
-    # On the other hand, current performance means that we know the lower limit for the multiplier is at least 1, so we
-    # do enforce that
-    limit_samples = np.log10(resample_between(algo_limit.sample(samples), min=1))
+    # Algorithmic regress is possible (due to regulation, knowledge loss, eg), which is represented by a growth_oom < 0
+    algo_growth_samples = algo_growth_rate.sample(samples) * transfer_multiplier_samples
+    limit_samples = algo_limit.sample(samples)
 
     algorithmic_improvement = []
     for rollout in range(samples):
         algorithmic_improvement.append([])
-        current_improvement = 0
-        for _ in YEAR_OFFSETS:
-            current_improvement += np.log10(growth_multiplier_samples[rollout])
+        for year_offset in YEAR_OFFSETS:
+            current_improvement = (1 + year_offset) * algo_growth_samples[rollout]
             # Ensure the input to log isn't literally zero, which it can be sometimes, due to FP approximations when
             # the `value` is sufficently small compared to the `limit`
-            constrained = max(1e-10, constrain(value=10**current_improvement, limit=10**limit_samples[rollout]))
+            constrained = max(1e-10, constrain(value=current_improvement, limit=limit_samples[rollout]))
             algorithmic_improvement[rollout].append(np.log10(constrained))
 
     return np.stack(algorithmic_improvement)
