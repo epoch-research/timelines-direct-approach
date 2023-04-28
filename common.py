@@ -77,8 +77,13 @@ class DistributionCI:
 def constrain(*, value: float, limit: float) -> float:
     if math.isclose(limit, 0):
         return 0
-    return limit * (1 - np.exp(-value / limit))
 
+    # Prevent overflow
+    max_exponent = 300
+    value = min(value, max_exponent)
+    limit = min(limit, max_exponent)
+
+    return 10**limit * (1 - np.exp(-10**(float(value - limit))))
 
 def resample_between(samples: npt.NDArray[np.float64], min: Optional[float] = None, max: Optional[float] = None):
     assert min is not None or max is not None
