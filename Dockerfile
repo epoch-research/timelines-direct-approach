@@ -13,9 +13,9 @@ RUN pip install pipenv
 COPY Pipfile Pipfile.lock ./
 RUN pipenv install --dev --system --deploy
 
-COPY blog_post.py ./
+COPY app.py ./
 COPY certs certs
 COPY data data
 COPY *.py ./
 
-CMD ["pipenv", "run", "uvicorn", "--host", "0.0.0.0", "--port", "8000", "--ssl-keyfile", "certs/privkey.pem", "--ssl-certfile", "certs/fullchain.pem", "blog_post:app"]
+CMD ["pipenv", "run", "uvicorn", "--host", "0.0.0.0", "--port", "8000", "--ssl-keyfile", "certs/privkey.pem", "--ssl-certfile", "certs/fullchain.pem", "app:app"]
