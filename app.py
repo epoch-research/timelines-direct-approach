@@ -10,6 +10,7 @@ from typing import TypedDict, Literal
 from typing import Union
 
 import matplotlib
+import seaborn
 import numpy as np
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.logger import logger
@@ -22,6 +23,8 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 import common
 import timeline
 from plots import plot_timeline, plot_tai_requirements, plot_tai_timeline, plot_tai_timeline_density
+
+seaborn.set_theme()
 
 matplotlib.use('AGG')
 
