@@ -191,7 +191,7 @@ def shutdown():
 def get_timeline_defaults():
     content = {"defaults": DEFAULT_PARAMS}
     # Nudge people a little bit to reduce the load
-    content['defaults']['samples'] = 200
+    content['defaults']['samples'] = 2000
     return JSONResponse(content=content)
 
 
