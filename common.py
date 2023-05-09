@@ -7,7 +7,7 @@ from scipy.stats import norm
 import math
 
 START_YEAR = 2023
-END_YEAR = 2100
+END_YEAR = 2101
 YEARS = list(range(START_YEAR, END_YEAR))
 YEAR_OFFSETS = list(range(END_YEAR - START_YEAR))
 NUM_SAMPLES = 6_000
@@ -84,6 +84,7 @@ def constrain(*, value: float, limit: float) -> float:
     limit = min(limit, max_exponent)
 
     return 10**limit * (1 - np.exp(-10**(float(value - limit))))
+
 
 def resample_between(samples: npt.NDArray[np.float64], min: Optional[float] = None, max: Optional[float] = None):
     assert min is not None or max is not None

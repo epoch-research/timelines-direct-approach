@@ -7,7 +7,7 @@ import queue
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from typing import TypedDict, Literal
-from typing import Union
+from typing import Dict, List, Union
 
 import matplotlib
 import seaborn
@@ -165,18 +165,18 @@ async def app_startup():
     q = queue.SimpleQueue()
 
     timeline_params = make_json_params_callable(DEFAULT_PARAMS)
-    generate_timeline_plots(timeline_params, q)
-    plots = []
-    while not q.empty():
-        plots.append(q.get())
+    summary = generate_timeline_plots(timeline_params, q)
+
+    with open('static/timeline-summary.json', 'w') as f:
+        json.dump(summary, f)
 
     plot_names = ['tai_requirements', 'adjusted_tai_requirements', 'cumulative_adjusted_tai_requirements',
                   'algorithmic_progress', 'spending', 'flops_per_dollar', 'physical_flops', 'effective_flops',
                   'tai_timeline', 'tai_timeline_density']
 
-    for plot_name, plot in zip(plot_names, plots):
+    for plot_name in plot_names:
         with open(f'static/{plot_name}.png', 'wb') as f:
-            f.write(plot)
+            f.write(q.get())
 
     app.mount("/static", StaticFiles(directory="static"), name="static")
     logger.info("Static files mounted")
@@ -190,8 +190,12 @@ def shutdown():
 @app.get("/timeline-defaults")
 def get_timeline_defaults():
     content = {"defaults": DEFAULT_PARAMS}
-    # Nudge people a little bit to reduce the load
-    content['defaults']['samples'] = 2000
+    # Nudge people a bit to reduce the load
+    content["defaults"]["samples"] = 2000
+
+    with open("static/timeline-summary.json") as f:
+        content["timeline_summary"] = json.load(f)
+
     return JSONResponse(content=content)
 
 
@@ -265,6 +269,9 @@ async def generate_timeline(websocket: WebSocket):
         except queue.Empty:
             break
 
+    # Send the timeline summary
+    await websocket.send_json(generate_timeline_process.result())
+
     await websocket.close()
 
 
@@ -275,7 +282,7 @@ def put_plot(fig: matplotlib.figure.Figure, q: Union[queue.SimpleQueue, mp.Queue
     matplotlib.pyplot.close(fig)
 
 
-def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queue]):
+def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queue]) -> Dict[str, List[str]]:
     tai_requirements, adjusted_tai_requirements = timeline.tai_requirements(**{**timeline_params['tai_requirements'],
                                                                                'update_on_no_tai': True})
     put_plot(plot_tai_requirements(tai_requirements, **TAI_REQUIREMENTS_PLOT_PARAMS), q)
@@ -304,3 +311,18 @@ def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queu
 
     put_plot(plot_tai_timeline(tai_timeline, **TAI_TIMELINE_PLOT_PARAMS), q)
     put_plot(plot_tai_timeline_density(arrivals, **TAI_TIMELINE_DENSITY_PLOT_PARAMS), q)
+
+    return timeline_summary(tai_timeline)
+
+
+def timeline_summary(tai_timeline: common.Timeline) -> Dict[str, List[str]]:
+    def quantile(q):
+        for year_offset, cum_prob in enumerate(tai_timeline):
+            if cum_prob >= q:
+                return str(year_offset + common.START_YEAR)
+        return ">2100"
+
+    return {
+        "probabilities": [str(round(100 * tai_timeline[year - common.START_YEAR])) + "%" for year in [2030, 2050, 2100]],
+        "quantiles": [quantile(q) for q in [0.10, 0.5, 0.9]],
+    }
