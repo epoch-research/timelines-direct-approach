@@ -277,7 +277,7 @@ async def generate_timeline(websocket: WebSocket):
 
 def put_plot(fig: matplotlib.figure.Figure, q: Union[queue.SimpleQueue, mp.Queue]):
     with io.BytesIO() as f:
-        fig.savefig(f)
+        fig.savefig(f, dpi=200)
         q.put(f.getvalue())
     matplotlib.pyplot.close(fig)
 
