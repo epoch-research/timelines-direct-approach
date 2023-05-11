@@ -20,8 +20,8 @@ def spending(
     # Ben's estimate (ie 0.004% to 5%) (Matthew's estimate: DistributionCI('lognormal', 70, 0.0000083, 0.014047))
     max_gwp_pct: DistributionCI = DistributionCI('lognormal', 95, 0.004, 5).change_width(),
     starting_gwp: float = 1.17e14,
-    # Take 43 million for GPT-4 and increase by 0.2 OOMs. Use millions here to make it easier for users to enter values
-    starting_max_spend: float = 4.3 * 10**0.2,
+    # millions of dollars
+    starting_max_spend: float = 100,
 ) -> Timeline:
     """
     We assume that the current maximum amount people are willing to spend on a training run is $2e7, which will grow at
