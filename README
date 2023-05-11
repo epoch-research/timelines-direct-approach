@@ -1,0 +1,13 @@
+# Deploying
+## Push to ECR
+1. Login to the ECR registry: `aws ecr get-login-password --profile epoch-david --region us-east-2 | docker login --username AWS --password-stdin 649526765752.dkr.ecr.us-east-2.amazonaws.com`
+2. Build the image: `docker build --platform linux/arm64 -t direct-approach-backend . && docker tag direct-approach-backend:latest 649526765752.dkr.ecr.us-east-2.amazonaws.com/direct-approach-backend:arm-latest`
+3. Push `docker push 649526765752.dkr.ecr.us-east-2.amazonaws.com/direct-approach-backend:arm-latest`
+
+## Deploy to EC2
+1. Login to ECR: `sudo aws ecr get-login-password --region us-east-2 | sudo docker login --username AWS --password-stdin 649526765752.dkr.ecr.us-east-2.amazonaws.com`
+2. Pull the image: `sudo docker pull 649526765752.dkr.ecr.us-east-2.amazonaws.com/direct-approach-backend:arm-latest`
+3. Stop and remove the old image: `sudo docker stop timelines-backend && sudo docker rm timelines-backend`
+4. Start running the new image: `sudo docker run -dp 8000:8000 --name=timelines-backend 649526765752.dkr.ecr.us-east-2.amazonaws.com/direct-approach-backend:arm-latest`
+5. Pipe the logs to stdout: `sudo docker logs -f timelines-backend`
+
