@@ -24,8 +24,8 @@ def spending(
     starting_max_spend: float = 100,
 ) -> Timeline:
     """
-    We assume that the current maximum amount people are willing to spend on a training run is $2e7, which will grow at
-    `invest_growth_rate` until we reach the `max_gwp_pct` of GWP, at which point it will grow at the rate of GWP
+    We assume that the current maximum amount people are willing to spend on a training run is $100 million, which will
+    grow at `invest_growth_rate` until we reach the `max_gwp_pct` of GWP, at which point it will grow at the rate of GWP
     (`gwp_growth_rate`).
     """
     # The growth rate can be negative, but the multiplier needs to be positive
