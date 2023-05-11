@@ -55,8 +55,8 @@ def flops_per_dollar(
     process_size_limit: DistributionCI = DistributionCI('lognormal', 70, 1.4, 2.48).change_width(),
     # expressed in OOMs
     hardware_specialization: DistributionCI = DistributionCI('lognormal', 90, 0.013, 0.176).change_width(),
-    # Rough median cost of GPU with performance of between 1e13 and 1e14 FLOP/s (Projections are ~1e13.5 in 2023)
-    gpu_dollar_cost: int = 1000,
+    # Chosen to get to a starting FLOP/$ of ~4e17
+    gpu_dollar_cost: int = 5_000,
 ):
     """
     General idea: Marius's projections give us a baseline projection of flops/s, which we modify with improvements from
