@@ -37,13 +37,15 @@ def plot_tai_timeline(tai_timeline, x_lab: str, y_lab: str, title: str) -> Figur
     return plot_fig
 
 
-def plot_tai_timeline_density(arrivals, x_lab: str, y_lab: str, title: str) -> Figure:
+def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab: str, title: str) -> Figure:
     arrival_counts = list(np.sum(arrivals, axis=1))
     new_arrivals = [cur - prev for prev, cur in zip([0] + arrival_counts, arrival_counts)]
     arrival_years = [year for year, count in zip(common.YEARS, new_arrivals) for _ in range(count)]
 
     plot_fig, plot_ax = plt.subplots()
     sns.histplot(arrival_years, kde=True, ax=plot_ax, stat='probability', binwidth=1)
+    plt.axvline(median_arrival, c='red', linestyle='dashed', label='median')
+    plt.legend()
     plot_ax.set_xlabel(x_lab)
     plot_ax.set_ylabel(y_lab)
     plot_ax.set_title(title)
