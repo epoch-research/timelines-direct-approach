@@ -324,7 +324,7 @@ def timeline_summary(tai_timeline: common.Timeline) -> Dict[str, List[str]]:
     }
 
 
-def quantile(q):
+def quantile(tai_timeline, q):
     for year_offset, cum_prob in enumerate(tai_timeline):
         if cum_prob >= q:
             return str(year_offset + common.START_YEAR)
