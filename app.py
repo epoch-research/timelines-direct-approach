@@ -309,7 +309,7 @@ def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queu
 
     arrivals = effective_compute_timeline.T > tai_requirements
     tai_timeline = np.sum(arrivals, axis=1) / timeline_params['samples']
-    median_arrival = np.interp(0.5, tai_timeline, np.arange(common.START_YEAR, common.END_YEAR))
+    median_arrival = quantile(tai_timeline, 0.5)
 
     put_plot(plot_tai_timeline(tai_timeline, **TAI_TIMELINE_PLOT_PARAMS), q)
     put_plot(plot_tai_timeline_density(arrivals, median_arrival, **TAI_TIMELINE_DENSITY_PLOT_PARAMS), q)
@@ -318,13 +318,14 @@ def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queu
 
 
 def timeline_summary(tai_timeline: common.Timeline) -> Dict[str, List[str]]:
-    def quantile(q):
-        for year_offset, cum_prob in enumerate(tai_timeline):
-            if cum_prob >= q:
-                return str(year_offset + common.START_YEAR)
-        return ">2100"
-
     return {
         "probabilities": [str(round(100 * tai_timeline[year - common.START_YEAR])) + "%" for year in [2030, 2050, 2100]],
         "quantiles": [quantile(q) for q in [0.10, 0.5, 0.9]],
     }
+
+
+def quantile(q):
+    for year_offset, cum_prob in enumerate(tai_timeline):
+        if cum_prob >= q:
+            return str(year_offset + common.START_YEAR)
+    return ">2100"
