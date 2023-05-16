@@ -30,7 +30,8 @@ matplotlib.use('AGG')
 
 POOL = None
 
-TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over log(FLOP) required for TAI'}
+TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over log(FLOP) required for TAI before adjustment'}
+ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over log(FLOP) required for TAI'}
 CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True,
                                            'title': 'Cumulative distribution over log(FLOP) required for TAI'}
 SPENDING_PLOT_PARAMS = {'y_lab': 'Largest Training Run ($)'}
@@ -286,7 +287,7 @@ def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queu
     tai_requirements, adjusted_tai_requirements = timeline.tai_requirements(**{**timeline_params['tai_requirements'],
                                                                                'update_on_no_tai': True})
     put_plot(plot_tai_requirements(tai_requirements, **TAI_REQUIREMENTS_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements(adjusted_tai_requirements, **TAI_REQUIREMENTS_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements(adjusted_tai_requirements, **ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
     put_plot(plot_tai_requirements(adjusted_tai_requirements, **CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS), q)
 
     if timeline_params['tai_requirements']['update_on_no_tai']:
