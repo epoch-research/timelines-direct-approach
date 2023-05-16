@@ -44,8 +44,8 @@ def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab
 
     plot_fig, plot_ax = plt.subplots()
     sns.histplot(arrival_years, kde=True, ax=plot_ax, stat='probability', binwidth=1)
-    label = median_arrival if isinstance(median_arrival, str) else f'median ({median_arrival:.0f})'
-    plt.axvline(median_arrival, c='red', linestyle='dashed', label=label)
+    median_label = '>2100' if np.isnan(median_arrival) else f'median ({median_arrival:.0f})'
+    plt.axvline(median_arrival, c='red', linestyle='dashed', label=median_label)
     plt.legend()
     plot_ax.set_xlabel(x_lab)
     plot_ax.set_ylabel(y_lab)

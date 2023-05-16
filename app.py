@@ -318,14 +318,15 @@ def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queu
 
 
 def timeline_summary(tai_timeline: common.Timeline) -> Dict[str, List[str]]:
+    quantiles = [quantile(tai_timeline, q) for q in [0.10, 0.5, 0.9]]
     return {
         "probabilities": [str(round(100 * tai_timeline[year - common.START_YEAR])) + "%" for year in [2030, 2050, 2100]],
-        "quantiles": [quantile(tai_timeline, q) for q in [0.10, 0.5, 0.9]],
+        "quantiles": [str(q) if not np.isnan(q) else ">2100" for q in quantiles],
     }
 
 
 def quantile(tai_timeline, q):
     for year_offset, cum_prob in enumerate(tai_timeline):
         if cum_prob >= q:
-            return str(year_offset + common.START_YEAR)
-    return ">2100"
+            return year_offset + common.START_YEAR
+    return np.nan
