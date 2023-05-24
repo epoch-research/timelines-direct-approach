@@ -10,6 +10,9 @@ from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFF
 from k_performance import computation_for_k_performance
 
 
+MAX_HARDWARE_SPECIALIZATION_GAINS = 100
+
+
 def spending(
     samples: int = NUM_SAMPLES,
     # from Ben's estimate of 0.1 to 0.3 OOMs per year in https://epochai.org/blog/trends-in-the-dollar-training-cost-of-machine-learning-systems#appendix-i-overall-best-guess-for-the-growth-rate-in-training-cost:~:text=my%20all%2Dthings%2Dconsidered%20view%20is%200.2%20OOMs/year%20(90%25%20CI%3A%200.1%20to%200.3%20OOMs/year
@@ -76,8 +79,11 @@ def flops_per_dollar(
     for rollout_idx, rollout in enumerate(log_flops_per_second):
         log_flops_per_dollar.append([])
         for year_offset in YEAR_OFFSETS:
-            # Then, we modify the baseline with hardware_specialization
-            rollout[year_offset] += (year_offset + 1) * hardware_specialization_samples[rollout_idx]
+            # Then, we modify the baseline with hardware_specialization (up to a limit)
+            hard_spec_gains = (year_offset + 1) * hardware_specialization_samples[rollout_idx]
+            hard_spec_gains = min(hard_spec_gains, MAX_HARDWARE_SPECIALIZATION_GAINS)
+
+            rollout[year_offset] += hard_spec_gains
 
             # Use a reasonable, >10% growth rate for the first year
             growth_rate = 10**(rollout[year_offset] - rollout[year_offset - 1]) - 1 if year_offset else 0.5
