@@ -21,7 +21,7 @@ def spending(
     max_gwp_pct: DistributionCI = DistributionCI('lognormal', 95, 0.004, 5).change_width(),
     starting_gwp: float = 1.17e14,
     # millions of dollars
-    starting_max_spend: float = 100,
+    starting_max_spend: float = 60,
 ) -> Timeline:
     """
     We assume that the current maximum amount people are willing to spend on a training run is $100 million, which will
@@ -91,7 +91,7 @@ def flops_per_dollar(
 
 def algorithmic_improvements(
     # (24.6, 215.18) in percentages, converted to OOMs
-    algo_growth_rate: DistributionCI = DistributionCI('normal', 95, np.log10(1.246), np.log10(315.18)).change_width(),
+    algo_growth_rate: DistributionCI = DistributionCI('normal', 80, 0.25, 0.75).change_width(),
     transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1).change_width(),
     algo_limit: DistributionCI = DistributionCI('lognormal', 70, 2, 10).change_width(),  # expressed in OOMs
     samples: int = NUM_SAMPLES,
