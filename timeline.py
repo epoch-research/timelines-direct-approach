@@ -10,7 +10,7 @@ from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFF
 from k_performance import computation_for_k_performance
 
 
-MAX_HARDWARE_SPECIALIZATION_GAINS = 2 # OOM
+MAX_HARDWARE_SPECIALIZATION_GAINS = np.log10(250) # OOM
 
 
 def spending(
