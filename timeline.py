@@ -57,7 +57,7 @@ def flops_per_dollar(
     transistors_per_core_limit: DistributionCI = DistributionCI('lognormal', 70, 0.896, 1.98).change_width(),
     process_size_limit: DistributionCI = DistributionCI('lognormal', 70, 1.4, 2.48).change_width(),
     # expressed in OOMs
-    hardware_specialization: DistributionCI = DistributionCI('lognormal', 90, 0.013, 0.176).change_width(),
+    hardware_specialization: DistributionCI = DistributionCI('lognormal', 90, 0.04, 0.25).change_width(),
     # Chosen to get to a starting FLOP/$ of ~4e17
     gpu_dollar_cost: int = 5_000,
 ):
