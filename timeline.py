@@ -19,7 +19,7 @@ def spending(
     # For ref: Epoch staff aggregate: DistributionCI('normal', 70, 1.1480341, 3.278781)
     invest_growth_rate: DistributionCI = DistributionCI('normal', 90, 25.9, 99.5).change_width(),
     # 116_639_700 in 2023 -> 237_830_800 in 2060 -> 1.9% per year
-    gwp_growth_rate: DistributionCI = DistributionCI('normal', 80, 0.4, 3.4).change_width(),
+    gwp_growth_rate: DistributionCI = DistributionCI('normal', 80, 0.4, 4.75).change_width(),
     # Ben's estimate (ie 0.004% to 5%) (Matthew's estimate: DistributionCI('lognormal', 70, 0.0000083, 0.014047))
     max_gwp_pct: DistributionCI = DistributionCI('lognormal', 95, 0.004, 5).change_width(),
     starting_gwp: float = 1.17e14,
@@ -57,7 +57,7 @@ def flops_per_dollar(
     transistors_per_core_limit: DistributionCI = DistributionCI('lognormal', 70, 0.896, 1.98).change_width(),
     process_size_limit: DistributionCI = DistributionCI('lognormal', 70, 1.4, 2.48).change_width(),
     # expressed in OOMs
-    hardware_specialization: DistributionCI = DistributionCI('lognormal', 90, 0.04, 0.25).change_width(),
+    hardware_specialization: DistributionCI = DistributionCI('lognormal', 80, 0.04, 0.25).change_width(),
     # Chosen to get to a starting FLOP/$ of ~4e17
     gpu_dollar_cost: int = 5_000,
 ):
@@ -99,7 +99,7 @@ def algorithmic_improvements(
     # (24.6, 215.18) in percentages, converted to OOMs
     algo_growth_rate: DistributionCI = DistributionCI('normal', 80, 0.25, 0.75).change_width(),
     transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1).change_width(),
-    algo_limit: DistributionCI = DistributionCI('lognormal', 70, 2, 10).change_width(),  # expressed in OOMs
+    algo_limit: DistributionCI = DistributionCI('lognormal', 80, 2.25, 12.1).change_width(),  # expressed in OOMs
     samples: int = NUM_SAMPLES,
 ):
     """
