@@ -75,6 +75,10 @@ class DistributionCI:
 
 
 def constrain(*, value: float, limit: float) -> float:
+    """
+    Implements `limit * (1 - exp(-value / limit))`, but a) takes inputs are in log space and returns values in linear
+    space, and b) includes a couple kludges to account for floating point issues.
+    """
     if math.isclose(limit, 0):
         return 0
 
@@ -83,7 +87,11 @@ def constrain(*, value: float, limit: float) -> float:
     value = min(value, max_exponent)
     limit = min(limit, max_exponent)
 
-    return 10**limit * (1 - np.exp(-10**(float(value - limit))))
+    exp_res = np.exp(-10**(float(value - limit)))
+
+    # I assume there's a better way to do this, but the goal is to avoid cases where `limit` is so much larger than
+    # `value` that exp rounds to 1.0 (which is why we can use == rather than math.isclose)
+    return 10**limit * (1 - exp_res) if exp_res != 1.0 else 10**value
 
 
 def resample_between(samples: npt.NDArray[np.float64], min: Optional[float] = None, max: Optional[float] = None):

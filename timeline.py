@@ -58,6 +58,8 @@ def flops_per_dollar(
     process_size_limit: DistributionCI = DistributionCI('lognormal', 70, 1.4, 2.48).change_width(),
     # expressed in OOMs
     hardware_specialization: DistributionCI = DistributionCI('lognormal', 80, 0.04, 0.25).change_width(),
+    # expressed in OOMs
+    hardware_specialiation_limit: float = np.log10(250),
     # Chosen to get to a starting FLOP/$ of ~4e17
     gpu_dollar_cost: int = 5_000,
 ):
@@ -81,9 +83,8 @@ def flops_per_dollar(
         for year_offset in YEAR_OFFSETS:
             # Then, we modify the baseline with hardware_specialization (up to a limit)
             hard_spec_gains = (year_offset + 1) * hardware_specialization_samples[rollout_idx]
-            hard_spec_gains = min(hard_spec_gains, MAX_HARDWARE_SPECIALIZATION_GAINS)
 
-            rollout[year_offset] += hard_spec_gains
+            rollout[year_offset] += min(hard_spec_gains, hardware_specialiation_limit)
 
             # Use a reasonable, >10% growth rate for the first year
             growth_rate = 10**(rollout[year_offset] - rollout[year_offset - 1]) - 1 if year_offset else 0.5
