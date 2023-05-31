@@ -4,6 +4,7 @@ import json
 import logging
 import multiprocessing as mp
 import queue
+import time
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from typing import TypedDict, Literal
@@ -231,6 +232,7 @@ async def generate_timeline(websocket: WebSocket):
     global POOL
 
     await websocket.accept()
+    start_time = time.time()
 
     json_params = json.loads(await websocket.receive_text())
     timeline_params = make_json_params_callable(json_params)
@@ -272,6 +274,9 @@ async def generate_timeline(websocket: WebSocket):
 
     # Send the timeline summary
     await websocket.send_json(generate_timeline_process.result())
+
+    logger.info(f"Generated {timeline_params['samples']} sample timeline "
+                f"in {round(time.time() - start_time, 1)} seconds")
 
     await websocket.close()
 
