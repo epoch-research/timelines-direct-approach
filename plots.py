@@ -23,8 +23,7 @@ def plot_timeline(tl: common.Timeline, y_lab: str, errorbar_interval: int = 90) 
     return plot_fig
 
 
-def plot_tai_timeline(tai_timeline, x_lab: str, y_lab: str, title: str) -> Figure:
-    # TODO: take the raw arrival yes/nos, convert to a beta distribution for each year, use that to plot uncertainty?
+def plot_tai_timeline(tai_timeline, median_arrival: float, x_lab: str, y_lab: str, title: str) -> Figure:
     plot_fig, plot_ax = plt.subplots()
 
     sns.lineplot(pd.DataFrame({
@@ -32,6 +31,10 @@ def plot_tai_timeline(tai_timeline, x_lab: str, y_lab: str, title: str) -> Figur
         'P(TAI)': tai_timeline,
     }), x=x_lab, y=y_lab, ax=plot_ax)
 
+    median_label = '>2100' if np.isnan(median_arrival) else f'median ({median_arrival:.0f})'
+    plt.axvline(median_arrival, c='red', linestyle='dashed', label=median_label)
+
+    plt.legend()
     plot_ax.set_title(title)
 
     return plot_fig
@@ -44,8 +47,10 @@ def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab
 
     plot_fig, plot_ax = plt.subplots()
     sns.histplot(arrival_years, kde=True, ax=plot_ax, stat='probability', binwidth=1)
+
     median_label = '>2100' if np.isnan(median_arrival) else f'median ({median_arrival:.0f})'
     plt.axvline(median_arrival, c='red', linestyle='dashed', label=median_label)
+
     plt.legend()
     plot_ax.set_xlabel(x_lab)
     plot_ax.set_ylabel(y_lab)

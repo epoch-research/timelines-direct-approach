@@ -316,7 +316,7 @@ def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queu
     tai_timeline = np.sum(arrivals, axis=1) / timeline_params['samples']
     median_arrival = quantile(tai_timeline, 0.5)
 
-    put_plot(plot_tai_timeline(tai_timeline, **TAI_TIMELINE_PLOT_PARAMS), q)
+    put_plot(plot_tai_timeline(tai_timeline, median_arrival, **TAI_TIMELINE_PLOT_PARAMS), q)
     put_plot(plot_tai_timeline_density(arrivals, median_arrival, **TAI_TIMELINE_DENSITY_PLOT_PARAMS), q)
 
     return timeline_summary(tai_timeline)
