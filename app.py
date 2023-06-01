@@ -31,10 +31,10 @@ matplotlib.use('AGG')
 
 POOL = None
 
-TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over log(FLOP) required for TAI before adjustment'}
-ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over log(FLOP) required for TAI after adjustment'}
+TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP required for TAI before adjustment'}
+ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP required for TAI after adjustment'}
 CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True,
-                                           'title': 'Cumulative distribution over log(FLOP) required for TAI after adjustment'}
+                                           'title': 'Cumulative distribution over effective FLOP required for TAI after adjustment'}
 SPENDING_PLOT_PARAMS = {'y_lab': 'Largest Training Run ($)'}
 ALGORITHMIC_PROGRESS_PLOT_PARAMS = {'y_lab': 'Algorithmic progress multiplier'}
 FLOPS_PER_DOLLAR_PLOT_PARAMS = {'y_lab': 'FLOP/$'}
