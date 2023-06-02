@@ -28,6 +28,7 @@ from plots import plot_timeline, plot_tai_requirements, plot_tai_timeline, plot_
 seaborn.set_theme()
 
 matplotlib.use('AGG')
+matplotlib.rcParams['axes.titlesize'] = 11.5
 
 POOL = None
 
