@@ -62,7 +62,7 @@ def flops_per_dollar(
     hardware_specialiation_limit: float = np.log10(250),
     # Chosen to get to a starting FLOP/$ of ~4e17
     gpu_dollar_cost: int = 5_000,
-):
+) -> Timeline:
     """
     General idea: Marius's projections give us a baseline projection of flops/s, which we modify with improvements from
     hardware specialization. The growth rate in flops/s defines the amortization period for the GPU, which then tells us
@@ -102,7 +102,7 @@ def algorithmic_improvements(
     transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1).change_width(),
     algo_limit: DistributionCI = DistributionCI('lognormal', 80, 2.25, 12.1).change_width(),  # expressed in OOMs
     samples: int = NUM_SAMPLES,
-):
+) -> Timeline:
     """
     Three components:
     - Base growth rate, from the "Algorithmic Progress in Computer Vision" paper
@@ -173,7 +173,7 @@ def tai_requirements(
             i += 1
 
     with basic_model:
-        idata = pm.sample(draws=samples, tune=2000, cores=1, target_accept=0.99, progressbar=False)
+        idata = pm.sample(draws=samples, tune=2_000, cores=1, target_accept=0.99, progressbar=False)
 
     return log_flops_needed_sample, idata.posterior["compute_req_oom"].values[0]
 

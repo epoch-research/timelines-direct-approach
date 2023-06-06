@@ -9,6 +9,9 @@ from matplotlib.figure import Figure
 import common
 
 
+plt.rcParams['font.family'] = 'DejaVu Sans'
+
+
 def plot_timeline(tl: common.Timeline, y_lab: str, errorbar_interval: int = 90) -> Figure:
     plot_fig, plot_ax = plt.subplots()
 
@@ -41,8 +44,9 @@ def plot_tai_timeline(tai_timeline, median_arrival: float, x_lab: str, y_lab: st
 
 
 def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab: str, title: str) -> Figure:
+    samples = arrivals.shape[1]
     arrival_counts = list(np.sum(arrivals, axis=1))
-    new_arrivals = [cur - prev for prev, cur in zip([0] + arrival_counts, arrival_counts)]
+    new_arrivals = np.array([cur - prev for prev, cur in zip([0] + arrival_counts, arrival_counts)])
     arrival_years = [year for year, count in zip(common.YEARS, new_arrivals) for _ in range(count)]
 
     plot_fig, plot_ax = plt.subplots()
@@ -50,6 +54,14 @@ def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab
 
     median_label = '>2100' if np.isnan(median_arrival) else f'median ({median_arrival:.0f})'
     plt.axvline(median_arrival, c='red', linestyle='dashed', label=median_label)
+
+    # Box to highlight the amount of density that's truncated
+    missing_density = round(100 * (1 - arrival_counts[-1] / samples), 1)
+    max_density_under_box = max(new_arrivals[2069-2023:] / samples)
+    plot_ax.text(2069, max_density_under_box + 0.01, f"P(TAI > 2100) = {missing_density}%\n",
+                 bbox=dict(boxstyle="round, rounding_size=0.2", facecolor='white', alpha=0.1, edgecolor='black'))
+    plot_ax.arrow(2090, max_density_under_box + 0.0105, dx=8, dy=0, edgecolor='black', facecolor='black',
+                  width=0.0005, head_width=0.0023, head_length=2.5)
 
     plt.legend()
     plot_ax.set_xlabel(x_lab)
