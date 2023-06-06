@@ -9,9 +9,6 @@ from matplotlib.figure import Figure
 import common
 
 
-plt.rcParams['font.family'] = 'DejaVu Sans'
-
-
 def plot_timeline(tl: common.Timeline, y_lab: str, errorbar_interval: int = 90) -> Figure:
     plot_fig, plot_ax = plt.subplots()
 

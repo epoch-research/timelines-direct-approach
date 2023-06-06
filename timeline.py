@@ -6,11 +6,8 @@ import numpy as np
 from scipy.stats import norm
 
 import gpu_efficiency
-from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain, resample_between
+from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain, resample_between, RNG
 from k_performance import computation_for_k_performance
-
-
-MAX_HARDWARE_SPECIALIZATION_GAINS = np.log10(250) # OOM
 
 
 def spending(
@@ -173,7 +170,7 @@ def tai_requirements(
             i += 1
 
     with basic_model:
-        idata = pm.sample(draws=samples, tune=2_000, cores=1, target_accept=0.99, progressbar=False)
+        idata = pm.sample(draws=samples, tune=2_000, cores=1, target_accept=0.99, progressbar=False, random_seed=RNG)
 
     return log_flops_needed_sample, idata.posterior["compute_req_oom"].values[0]
 

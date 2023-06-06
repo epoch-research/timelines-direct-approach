@@ -25,10 +25,12 @@ import common
 import timeline
 from plots import plot_timeline, plot_tai_requirements, plot_tai_timeline, plot_tai_timeline_density
 
-seaborn.set_theme()
 
+seaborn.set_theme()
 matplotlib.use('AGG')
+matplotlib.rcParams['font.family'] = 'DejaVu Sans'
 matplotlib.rcParams['axes.titlesize'] = 11.5
+np.random.seed(2024)
 
 POOL = None
 
