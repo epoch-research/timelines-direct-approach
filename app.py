@@ -27,7 +27,7 @@ from plots import plot_timeline, plot_tai_requirements, plot_tai_timeline, plot_
 
 
 seaborn.set_theme()
-matplotlib.use('AGG')
+#matplotlib.use('AGG')
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'
 matplotlib.rcParams['axes.titlesize'] = 11.5
 np.random.seed(2024)
@@ -123,7 +123,7 @@ class AlgorithmicImprovementsParams(BaseModel):
 class TAIRequirementsParams(BaseModel):
     slowdown: DistributionCIParams
     k_performance: DistributionCIParams
-    upper_bound_weight: confloat(ge=0, lef=1)
+    upper_bound_weight: confloat(ge=0, le=1)
 
     @validator("slowdown", "k_performance", pre=True)
     def check_lower_bound_gt_zero(cls, value):

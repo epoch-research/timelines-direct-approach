@@ -5,16 +5,18 @@ import sympy as sp
 import numpy as np
 import numpy.typing as npt
 from scipy.stats import norm, gaussian_kde, rv_continuous
-from scipy.integrate import quad
+from scipy.integrate import quad, cumulative_trapezoid
 
 import gpu_efficiency
 from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain, resample_between, RNG, CURRENT_LARGEST_TRAINING_RUN
 from k_performance import computation_for_k_performance
 
+import matplotlib.pyplot as plt
+
 
 class UninformativeTaiFlopPrior(rv_continuous):
     def __init__(self, current_largest_training_run, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(a=current_largest_training_run, *args, **kwargs)
 
         x = sp.Symbol('x')
 
@@ -34,13 +36,17 @@ class TaiFlopPosterior(rv_continuous):
     r"""
     Update a prior on TAI requirements given an upper bound distribution, using this update rule:
 
-        p^{\prime}(x) = \int_{x}^{\infty} p(x) \frac{\text{upper_bound}(u)}{\text{CDF}(u)} du
+        p^{\prime}(x) = s * \int_{x}^{\infty} p(x) \frac{\text{upper_bound}(u)}{\text{CDF}(u)} du,
+
+    where
+
+        s = \frac{1}{1 - CDF(min(support(upper_bound), support(p)))}.
 
     TODO: Add link to writeup
     """
 
     def __init__(self, prior: rv_continuous, upper_bound: rv_continuous, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(a=max(prior.a, upper_bound.a), *args, **kwargs)
 
         self.prior = prior
         self.upper_bound = upper_bound
@@ -48,24 +54,34 @@ class TaiFlopPosterior(rv_continuous):
     def _pdf(self, x):
         # Computes the update rule in a sort of efficient way
 
-        is_array = isinstance(x, np.ndarray)
+        f = lambda u: self.upper_bound.pdf(u)/self.prior.cdf(u)
 
-        if not is_array:
-            x = np.array([x])
+        result = self.prior.pdf(x) * self.reverse_cumulative_quad(f, x, self.a)
+        result /= (1 - self.upper_bound.cdf(self.a))
 
-        assert np.all(np.diff(x) >= 0), 'The input array must be sorted'
+        return result
+
+    def _cdf(self, x):
+        # Automatically integrating the PDF is a bit difficult. We do this manually ourselves.
 
         f = lambda u: self.upper_bound.pdf(u)/self.prior.cdf(u)
+
+        result = [x > self.a] * ((self.upper_bound.cdf(x) - self.upper_bound.cdf(self.a)) + self.prior.cdf(x) * self.reverse_cumulative_quad(f, x, self.a))
+        result /= (1 - self.upper_bound.cdf(self.a))
+
+        return result
+
+    def reverse_cumulative_quad(self, f: Callable, x: npt.NDArray, x0: float) -> npt.NDArray:
+        assert np.all(np.diff(x) >= 0), 'x must be sorted'
 
         quads = []
         for i in range(len(x)):
             a = x[i]
             b = x[i+1] if i < len(x) - 1 else np.inf
-            q = 0 if (self.prior.cdf(a) == 0) else quad(f, a, b)[0]
+            q = 0 if (a < x0) else quad(f, a, b)[0]
             quads.append(q)
-        result = self.prior.pdf(x) * np.cumsum(quads[::-1])[::-1]
 
-        return result if is_array else result[0]
+        return np.cumsum(quads[::-1])[::-1]
 
 
 class CombinationDistribution(rv_continuous):
@@ -98,7 +114,12 @@ class GriddedDistribution(rv_continuous):
 
         self.grid = grid
         self.pdf_grid = dist.pdf(grid)
-        self.cdf_grid = np.cumsum(self.pdf_grid * np.insert(np.diff(self.grid), 0, 0))
+
+        if isinstance(dist, gaussian_kde):
+            # gaussian_kdes don't have a .cdf() method
+            self.cdf_grid = cumulative_trapezoid(self.pdf_grid, self.grid, initial=0)
+        else:
+            self.cdf_grid = dist.cdf(grid)
 
     def _pdf(self, x):
         return np.interp(x, self.grid, self.pdf_grid)
@@ -229,7 +250,7 @@ def tai_requirements(
     samples: int = NUM_SAMPLES,
     slowdown: DistributionCI = DistributionCI('lognormal', 70, 9.84, 290).change_width(),
     k_performance: DistributionCI = DistributionCI('lognormal', 70, 3129, 141714).change_width(),
-    upper_bound_weight: float = 0.1,
+    upper_bound_weight: float = 0.9,
 ) -> Tuple[Distribution, Distribution, rv_continuous, rv_continuous, rv_continuous, rv_continuous]:
     """
     User specifies:
@@ -251,7 +272,9 @@ def tai_requirements(
     # use the upper bound above to update an uninformative prior
 
     current_largest_training_run = 25
-    approx_grid = np.linspace(20, 80, 500)
+
+    approx_grid = np.linspace(1, 100, 500)
+    approx_grid = np.sort(np.unique(approx_grid))
 
     prior       = UninformativeTaiFlopPrior(CURRENT_LARGEST_TRAINING_RUN)
     upper_bound = GriddedDistribution(gaussian_kde(upper_bound_samples), grid=approx_grid)
