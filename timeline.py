@@ -239,7 +239,7 @@ def tai_requirements(
     """
 
     slowdown_samples = slowdown.sample(samples)
-    k_performance_samples = k_performance.sample(upper_bound_samples)
+    k_performance_samples = k_performance.sample(samples)
 
     upper_bound_samples = []
     for i in range(len(slowdown_samples)):
