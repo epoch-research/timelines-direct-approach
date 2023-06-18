@@ -1,13 +1,110 @@
 import inspect
-import pymc as pm
-from typing import List, Callable, Union
+from typing import List, Tuple, Callable, Union
 
+import sympy as sp
 import numpy as np
-from scipy.stats import norm
+import numpy.typing as npt
+from scipy.stats import norm, gaussian_kde, rv_continuous
+from scipy.integrate import quad
 
 import gpu_efficiency
-from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain, resample_between, RNG
+from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain, resample_between, RNG, CURRENT_LARGEST_TRAINING_RUN
 from k_performance import computation_for_k_performance
+
+
+class UninformativeTaiFlopPrior(rv_continuous):
+    def __init__(self, current_largest_training_run, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        x = sp.Symbol('x')
+
+        # TODO Ask for the rationale behind this distribution
+        cdf = sp.Piecewise(
+            (0, x < current_largest_training_run),
+            (1 - (current_largest_training_run/x)**(1/3), True),
+        )
+
+        pdf = sp.diff(cdf, x)
+
+        self._cdf = sp.lambdify((x,), cdf)
+        self._pdf = sp.lambdify((x,), pdf)
+
+
+class TaiFlopPosterior(rv_continuous):
+    r"""
+    Update a prior on TAI requirements given an upper bound distribution, using this update rule:
+
+        p^{\prime}(x) = \int_{x}^{\infty} p(x) \frac{\text{upper_bound}(u)}{\text{CDF}(u)} du
+
+    TODO: Add link to writeup
+    """
+
+    def __init__(self, prior: rv_continuous, upper_bound: rv_continuous, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.prior = prior
+        self.upper_bound = upper_bound
+
+    def _pdf(self, x):
+        # Computes the update rule in a sort of efficient way
+
+        is_array = isinstance(x, np.ndarray)
+
+        if not is_array:
+            x = np.array([x])
+
+        assert np.all(np.diff(x) >= 0), 'The input array must be sorted'
+
+        f = lambda u: self.upper_bound.pdf(u)/self.prior.cdf(u)
+
+        quads = []
+        for i in range(len(x)):
+            a = x[i]
+            b = x[i+1] if i < len(x) - 1 else np.inf
+            q = 0 if (self.prior.cdf(a) == 0) else quad(f, a, b)[0]
+            quads.append(q)
+        result = self.prior.pdf(x) * np.cumsum(quads[::-1])[::-1]
+
+        return result if is_array else result[0]
+
+
+class CombinationDistribution(rv_continuous):
+    """Combination of two continuous distributions. The combined distribution is
+
+        left_weight * dist_left + (1 - left_weight) * dist_right
+    """
+
+    def __init__(self, dist_left: rv_continuous, dist_right: rv_continuous, left_weight: float, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.dist_left = dist_left
+        self.dist_right = dist_right
+        self.left_weight = left_weight
+
+    def _pdf(self, x):
+        p = self.left_weight * self.dist_left.pdf(x) + (1 - self.left_weight) * self.dist_right.pdf(x)
+        return p
+
+    def _cdf(self, x):
+        c = self.left_weight * self.dist_left.cdf(x) + (1 - self.left_weight) * self.dist_right.cdf(x)
+        return c
+
+
+class GriddedDistribution(rv_continuous):
+    """Generates a distribution by sampling a PDF in a grid and then interpolate it. This might help performance."""
+
+    def __init__(self, dist: Union[rv_continuous, gaussian_kde], grid: npt.NDArray, *args, **kwargs):
+        super().__init__(a=min(grid), b=max(grid), *args, **kwargs)
+
+        self.grid = grid
+        self.pdf_grid = dist.pdf(grid)
+        self.cdf_grid = np.cumsum(self.pdf_grid * np.insert(np.diff(self.grid), 0, 0))
+
+    def _pdf(self, x):
+        return np.interp(x, self.grid, self.pdf_grid)
+
+    def _cdf(self, x):
+        return np.interp(x, self.grid, self.cdf_grid)
 
 
 def spending(
@@ -132,54 +229,45 @@ def tai_requirements(
     samples: int = NUM_SAMPLES,
     slowdown: DistributionCI = DistributionCI('lognormal', 70, 9.84, 290).change_width(),
     k_performance: DistributionCI = DistributionCI('lognormal', 70, 3129, 141714).change_width(),
-    update_on_no_tai: bool = True,
-) -> Union[tuple[Distribution, Distribution], Distribution]:
+    upper_bound_weight: float = 0.1,
+) -> Tuple[Distribution, Distribution, rv_continuous, rv_continuous, rv_continuous, rv_continuous]:
     """
     User specifies:
     - slowdown: the degree to which the human judge will update slower than the ideal predictor.
     - k_performance: the length of the transformative task
+    - prior_weight: how much weight to give to the prior vs the updated posterior
     """
-    slowdown_samples = slowdown.sample(samples)
-    k_performance_samples = k_performance.sample(samples)
 
-    log_flops_needed_sample = []
+    slowdown_samples = slowdown.sample(samples)
+    k_performance_samples = k_performance.sample(upper_bound_samples)
+
+    upper_bound_samples = []
     for i in range(len(slowdown_samples)):
         c = computation_for_k_performance(k_performance_samples[i], slowdown_samples[i])
-        log_flops_needed_sample.append(c)
+        upper_bound_samples.append(c)
 
-    log_flops_needed_sample = np.array(log_flops_needed_sample)
+    upper_bound_samples = np.array(upper_bound_samples)
 
-    if not update_on_no_tai:
-        return log_flops_needed_sample
+    # use the upper bound above to update an uninformative prior
 
-    compute_mu, compute_std = norm.fit(log_flops_needed_sample)
+    current_largest_training_run = 25
+    approx_grid = np.linspace(20, 80, 500)
 
-    training_runs = [(np.log10(1e17), 8), (np.log10(1e23), 2), (np.log10(1e25), 1)]
+    prior       = UninformativeTaiFlopPrior(CURRENT_LARGEST_TRAINING_RUN)
+    upper_bound = GriddedDistribution(gaussian_kde(upper_bound_samples), grid=approx_grid)
+    posterior   = GriddedDistribution(TaiFlopPosterior(prior, upper_bound), grid=approx_grid)
+    combination = CombinationDistribution(upper_bound, posterior, left_weight=upper_bound_weight)
 
-    basic_model = pm.Model()
-    with basic_model:
-        # compute requirements at which it takes 1 year to produce AGI in expectation
-        compute_req_oom = pm.Normal("compute_req_oom", mu=compute_mu, sigma=compute_std)
-        decay_exponent = 0.3
+    tai_requirements_samples = combination.rvs(size=samples)
 
-        i = 1
-        for pair in training_runs:
-            (run_size, duration) = pair
-            poisson_mean = 10 ** (decay_exponent * (run_size - compute_req_oom))
-            agi_arrived = pm.Poisson("agi_arrived_" + str(i), mu=poisson_mean * duration, observed=0)
-            i += 1
-
-    with basic_model:
-        idata = pm.sample(draws=samples, tune=2_000, cores=1, target_accept=0.99, progressbar=False, random_seed=RNG)
-
-    return log_flops_needed_sample, idata.posterior["compute_req_oom"].values[0]
+    return tai_requirements_samples, upper_bound_samples, prior, upper_bound, posterior, combination
 
 
 def sample_timeline(
     samples: int = NUM_SAMPLES,
 ):
     compute_available = spending(samples=samples) + flops_per_dollar(samples=samples) + algorithmic_improvements(samples=samples)
-    arrivals = compute_available.T > tai_requirements(samples=samples)[1]
+    arrivals = compute_available.T > tai_requirements(samples=samples)[0]
 
     return np.sum(arrivals, axis=1) / samples
 

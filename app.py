@@ -123,7 +123,7 @@ class AlgorithmicImprovementsParams(BaseModel):
 class TAIRequirementsParams(BaseModel):
     slowdown: DistributionCIParams
     k_performance: DistributionCIParams
-    update_on_no_tai: bool
+    upper_bound_weight: confloat(ge=0, lef=1)
 
     @validator("slowdown", "k_performance", pre=True)
     def check_lower_bound_gt_zero(cls, value):
@@ -292,14 +292,10 @@ def put_plot(fig: matplotlib.figure.Figure, q: Union[queue.SimpleQueue, mp.Queue
 
 
 def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queue]) -> Dict[str, List[str]]:
-    tai_requirements, adjusted_tai_requirements = timeline.tai_requirements(**{**timeline_params['tai_requirements'],
-                                                                               'update_on_no_tai': True})
-    put_plot(plot_tai_requirements(tai_requirements, **TAI_REQUIREMENTS_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements(adjusted_tai_requirements, **ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements(adjusted_tai_requirements, **CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS), q)
-
-    if timeline_params['tai_requirements']['update_on_no_tai']:
-        tai_requirements = adjusted_tai_requirements
+    tai_requirements, upper_bound_samples, prior, upper_bound, posterior, combination = timeline.tai_requirements(**timeline_params['tai_requirements'])
+    put_plot(plot_tai_requirements(upper_bound_samples, **TAI_REQUIREMENTS_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements(tai_requirements, **ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements(tai_requirements, **CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS), q)
 
     algorithmic_progress_timeline = timeline.algorithmic_improvements(**timeline_params['algorithmic_improvements'])
     put_plot(plot_timeline(algorithmic_progress_timeline, **ALGORITHMIC_PROGRESS_PLOT_PARAMS), q)
