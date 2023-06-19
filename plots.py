@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib.figure import Figure
+from scipy.stats import rv_continuous
 
 import common
 
@@ -72,6 +73,26 @@ def plot_tai_requirements(tai_requirements: common.Distribution, x_lab: str,
                           title: str, cumulative: bool = False) -> Figure:
     plot_fig, plot_ax = plt.subplots()
     sns.histplot(tai_requirements, kde=True, ax=plot_ax, stat='probability', binwidth=1, cumulative=cumulative)
+    plot_ax.set_xlabel(x_lab)
+    plot_ax.set_title(title)
+
+    return plot_fig
+
+
+def plot_tai_requirements_adjustment_decomposition(prior: rv_continuous, upper_bound: rv_continuous, posterior: rv_continuous, combination: rv_continuous,
+        x_lab: str, title: str, cumulative: bool = False) -> Figure:
+    plot_fig, plot_ax = plt.subplots()
+
+    # TODO Automatically compute limits in X
+    grid = np.linspace(10, 100, 500)
+
+    df = lambda dist: dist.cdf if cumulative else dist.pdf
+    sns.lineplot(x=grid, y=df(prior)(grid),       ax=plot_ax, label="Prior")
+    sns.lineplot(x=grid, y=df(upper_bound)(grid), ax=plot_ax, label="Upper bound")
+    sns.lineplot(x=grid, y=df(posterior)(grid),   ax=plot_ax, label="Posterior")
+    sns.lineplot(x=grid, y=df(combination)(grid), ax=plot_ax, label="Mixture", linestyle='--')
+
+    plot_ax.legend()
     plot_ax.set_xlabel(x_lab)
     plot_ax.set_title(title)
 

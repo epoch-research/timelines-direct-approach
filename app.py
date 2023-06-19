@@ -24,6 +24,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 import common
 import timeline
 from plots import plot_timeline, plot_tai_requirements, plot_tai_timeline, plot_tai_timeline_density
+from plots import plot_tai_requirements_adjustment_decomposition
 
 
 seaborn.set_theme()
@@ -36,6 +37,8 @@ POOL = None
 
 TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP required for TAI before adjustment'}
 ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP required for TAI after adjustment'}
+TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Decomposition of the adjustment (PDF)'}
+CUMULATIVE_TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True, 'title': 'Decomposition of the adjustment (CDF)'}
 CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True,
                                            'title': 'Cumulative distribution over effective FLOP required for TAI after adjustment'}
 SPENDING_PLOT_PARAMS = {'y_lab': 'Largest Training Run ($)'}
@@ -175,7 +178,8 @@ async def app_startup():
     with open('static/timeline-summary.json', 'w') as f:
         json.dump(summary, f)
 
-    plot_names = ['tai_requirements', 'adjusted_tai_requirements', 'cumulative_adjusted_tai_requirements',
+    plot_names = ['tai_requirements', 'tai_requirements_adjustment_decomposition', 'cumulative_tai_requirements_adjustment_decomposition',
+                  'adjusted_tai_requirements', 'cumulative_adjusted_tai_requirements',
                   'algorithmic_progress', 'spending', 'flops_per_dollar', 'physical_flops', 'effective_flops',
                   'tai_timeline', 'tai_timeline_density']
 
@@ -294,6 +298,8 @@ def put_plot(fig: matplotlib.figure.Figure, q: Union[queue.SimpleQueue, mp.Queue
 def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queue]) -> Dict[str, List[str]]:
     tai_requirements, upper_bound_samples, prior, upper_bound, posterior, combination = timeline.tai_requirements(**timeline_params['tai_requirements'])
     put_plot(plot_tai_requirements(upper_bound_samples, **TAI_REQUIREMENTS_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements_adjustment_decomposition(prior, upper_bound, posterior, combination, **TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements_adjustment_decomposition(prior, upper_bound, posterior, combination, **CUMULATIVE_TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS), q)
     put_plot(plot_tai_requirements(tai_requirements, **ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
     put_plot(plot_tai_requirements(tai_requirements, **CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS), q)
 
