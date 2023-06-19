@@ -274,7 +274,6 @@ def tai_requirements(
     current_largest_training_run = 25
 
     approx_grid = np.linspace(1, 100, 500)
-    approx_grid = np.sort(np.unique(approx_grid))
 
     prior       = UninformativeTaiFlopPrior(CURRENT_LARGEST_TRAINING_RUN)
     upper_bound = GriddedDistribution(gaussian_kde(upper_bound_samples), grid=approx_grid)
