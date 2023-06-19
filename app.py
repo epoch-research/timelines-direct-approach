@@ -27,7 +27,7 @@ from plots import plot_timeline, plot_tai_requirements, plot_tai_timeline, plot_
 
 
 seaborn.set_theme()
-#matplotlib.use('AGG')
+matplotlib.use('AGG')
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'
 matplotlib.rcParams['axes.titlesize'] = 11.5
 np.random.seed(2024)
