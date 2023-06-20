@@ -36,8 +36,8 @@ np.random.seed(2024)
 POOL = None
 
 TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP before update on upper bound'}
-TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Decomposition of the adjustment (PDF)'}
-CUMULATIVE_TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True, 'title': 'Decomposition of the adjustment (CDF)'}
+TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Decomposition of the update'}
+CUMULATIVE_TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True, 'title': 'Decomposition of the update (cumulative distributions)'}
 ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP after update on upper bound'}
 CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True,
                                            'title': 'Cumulative distribution over effective FLOP required for TAI after adjustment'}
