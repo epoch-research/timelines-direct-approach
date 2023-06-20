@@ -56,10 +56,10 @@ def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab
     # Box to highlight the amount of density that's truncated
     missing_density = 1 - arrival_counts[-1]/samples
     max_density_under_box = max(new_arrivals[2072-2023:] / samples)
-    plot_ax.text(2072, max_density_under_box + 0.01, f"P(>2100) = {missing_density:.1%}\n", linespacing=0.15,
+    plot_ax.text(2072, max_density_under_box + 0.01, f"P(>2100) = {missing_density:.1%}\n", linespacing=0.35,
                  bbox=dict(boxstyle="round, rounding_size=0.2", facecolor='white', alpha=0.1, edgecolor='black'))
-    plot_ax.arrow(2088.2, max_density_under_box + 0.0087, dx=8, dy=0, color='#666',
-                  width=0.0010, head_width=0.0028, head_length=2.5)
+    plot_ax.arrow(2088, max_density_under_box + 0.0095, dx=8, dy=0, color='#666',
+                  width=0.0025, head_width=0.0065, head_length=2.5)
 
     plt.legend()
     plot_ax.set_xlabel(x_lab)
