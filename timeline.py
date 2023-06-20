@@ -84,7 +84,7 @@ class TaiFlopPosterior(rv_continuous):
         return np.cumsum(quads[::-1])[::-1]
 
 
-class CombinationDistribution(rv_continuous):
+class MixtureDistribution(rv_continuous):
     """Combination of two continuous distributions. The combined distribution is
 
         left_weight * dist_left + (1 - left_weight) * dist_right
@@ -251,7 +251,7 @@ def tai_requirements(
     slowdown: DistributionCI = DistributionCI('lognormal', 70, 9.84, 290).change_width(),
     k_performance: DistributionCI = DistributionCI('lognormal', 70, 3129, 141714).change_width(),
     upper_bound_weight: float = 0.9,
-) -> Tuple[Distribution, Distribution, rv_continuous, rv_continuous, rv_continuous, rv_continuous]:
+) -> Tuple[Distribution, Distribution, rv_continuous, rv_continuous, rv_continuous]:
     """
     User specifies:
     - slowdown: the degree to which the human judge will update slower than the ideal predictor.
@@ -275,14 +275,14 @@ def tai_requirements(
 
     approx_grid = np.linspace(1, 100, 500)
 
-    prior       = UninformativeTaiFlopPrior(CURRENT_LARGEST_TRAINING_RUN)
-    upper_bound = GriddedDistribution(gaussian_kde(upper_bound_samples), grid=approx_grid)
-    posterior   = GriddedDistribution(TaiFlopPosterior(prior, upper_bound), grid=approx_grid)
-    combination = CombinationDistribution(upper_bound, posterior, left_weight=upper_bound_weight)
+    prior         = UninformativeTaiFlopPrior(CURRENT_LARGEST_TRAINING_RUN)
+    upper_bound   = GriddedDistribution(gaussian_kde(upper_bound_samples), grid=approx_grid)
+    updated_prior = GriddedDistribution(TaiFlopPosterior(prior, upper_bound), grid=approx_grid)
+    posterior     = MixtureDistribution(upper_bound, updated_prior, left_weight=upper_bound_weight)
 
-    tai_requirements_samples = combination.rvs(size=samples)
+    tai_requirements_samples = posterior.rvs(size=samples)
 
-    return tai_requirements_samples, upper_bound_samples, prior, upper_bound, posterior, combination
+    return tai_requirements_samples, upper_bound_samples, prior, upper_bound, posterior
 
 
 def sample_timeline(

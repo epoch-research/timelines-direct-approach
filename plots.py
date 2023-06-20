@@ -79,7 +79,7 @@ def plot_tai_requirements(tai_requirements: common.Distribution, x_lab: str,
     return plot_fig
 
 
-def plot_tai_requirements_adjustment_decomposition(prior: rv_continuous, upper_bound: rv_continuous, posterior: rv_continuous, combination: rv_continuous,
+def plot_tai_requirements_adjustment_decomposition(prior: rv_continuous, upper_bound: rv_continuous, posterior: rv_continuous,
         x_lab: str, title: str, cumulative: bool = False) -> Figure:
     plot_fig, plot_ax = plt.subplots()
 
@@ -89,8 +89,7 @@ def plot_tai_requirements_adjustment_decomposition(prior: rv_continuous, upper_b
     df = lambda dist: dist.cdf if cumulative else dist.pdf
     sns.lineplot(x=grid, y=df(prior)(grid),       ax=plot_ax, label="Prior")
     sns.lineplot(x=grid, y=df(upper_bound)(grid), ax=plot_ax, label="Upper bound")
-    sns.lineplot(x=grid, y=df(posterior)(grid),   ax=plot_ax, label="Posterior")
-    sns.lineplot(x=grid, y=df(combination)(grid), ax=plot_ax, label="Mixture", linestyle='--')
+    sns.lineplot(x=grid, y=df(posterior)(grid),   ax=plot_ax, label="Posterior", linestyle='--')
 
     plot_ax.legend()
     plot_ax.set_xlabel(x_lab)

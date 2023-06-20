@@ -35,10 +35,10 @@ np.random.seed(2024)
 
 POOL = None
 
-TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP required for TAI before adjustment'}
-ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP required for TAI after adjustment'}
+TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP before update on upper bound'}
 TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Decomposition of the adjustment (PDF)'}
 CUMULATIVE_TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True, 'title': 'Decomposition of the adjustment (CDF)'}
+ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP after update on upper bound'}
 CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True,
                                            'title': 'Cumulative distribution over effective FLOP required for TAI after adjustment'}
 SPENDING_PLOT_PARAMS = {'y_lab': 'Largest Training Run ($)'}
@@ -296,10 +296,10 @@ def put_plot(fig: matplotlib.figure.Figure, q: Union[queue.SimpleQueue, mp.Queue
 
 
 def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queue]) -> Dict[str, List[str]]:
-    tai_requirements, upper_bound_samples, prior, upper_bound, posterior, combination = timeline.tai_requirements(**timeline_params['tai_requirements'])
+    tai_requirements, upper_bound_samples, prior, upper_bound, posterior = timeline.tai_requirements(**timeline_params['tai_requirements'])
     put_plot(plot_tai_requirements(upper_bound_samples, **TAI_REQUIREMENTS_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements_adjustment_decomposition(prior, upper_bound, posterior, combination, **TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements_adjustment_decomposition(prior, upper_bound, posterior, combination, **CUMULATIVE_TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements_adjustment_decomposition(prior, upper_bound, posterior, **TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements_adjustment_decomposition(prior, upper_bound, posterior, **CUMULATIVE_TAI_REQUIREMENTS_ADJUSTMENT_DECOMPOSITION_PLOT_PARAMS), q)
     put_plot(plot_tai_requirements(tai_requirements, **ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
     put_plot(plot_tai_requirements(tai_requirements, **CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS), q)
 
