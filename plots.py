@@ -60,7 +60,7 @@ def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab
     plot_ax.text(2072, max_density_under_box + scale_y*0.037, f"P(>2100) = {missing_density:.1%}\n", linespacing=0.35,
                  bbox=dict(boxstyle="round, rounding_size=0.2", facecolor='white', alpha=0.1, edgecolor='black'))
     plot_ax.arrow(2088, max_density_under_box + scale_y*0.035, dx=8, dy=0, color='#666',
-                  width=scale_y*0.01, head_width=scale_y*0.024, head_length=2.5)
+                  width=scale_y*0.006, head_width=scale_y*0.024, head_length=2.5)
 
     plt.legend()
     plot_ax.set_xlabel(x_lab)
