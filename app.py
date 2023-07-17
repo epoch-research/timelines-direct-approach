@@ -130,7 +130,7 @@ class TAIRequirementsParams(BaseModel):
     slowdown: DistributionCIParams
     k_performance: DistributionCIParams
     update_on_no_tai: bool
-    scale_distribution: bool
+    scale_tai_requirements: bool
 
     @validator("slowdown", "k_performance", pre=True)
     def check_lower_bound_gt_zero(cls, value):
