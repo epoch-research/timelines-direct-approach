@@ -10,6 +10,10 @@ from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFF
 from k_performance import computation_for_k_performance
 
 
+SCALE_TAI_REQS_FIXED_POINT = 25 # log10 FLOP
+SCALE_TAI_REQS_SCALE_FACTOR = 5/7
+
+
 def spending(
     samples: int = NUM_SAMPLES,
     # from Ben's estimate of 0.1 to 0.3 OOMs per year in https://epochai.org/blog/trends-in-the-dollar-training-cost-of-machine-learning-systems#appendix-i-overall-best-guess-for-the-growth-rate-in-training-cost:~:text=my%20all%2Dthings%2Dconsidered%20view%20is%200.2%20OOMs/year%20(90%25%20CI%3A%200.1%20to%200.3%20OOMs/year
@@ -133,12 +137,15 @@ def tai_requirements(
     slowdown: DistributionCI = DistributionCI('lognormal', 70, 9.84, 290).change_width(),
     k_performance: DistributionCI = DistributionCI('lognormal', 70, 3129, 141714).change_width(),
     update_on_no_tai: bool = True,
+    scale_tai_requirements: bool = True,
 ) -> Union[tuple[Distribution, Distribution], Distribution]:
     """
     User specifies:
     - slowdown: the degree to which the human judge will update slower than the ideal predictor.
     - k_performance: the length of the transformative task
     """
+    output_requirements = []
+
     slowdown_samples = slowdown.sample(samples)
     k_performance_samples = k_performance.sample(samples)
 
@@ -149,30 +156,38 @@ def tai_requirements(
 
     log_flops_needed_sample = np.array(log_flops_needed_sample)
 
-    if not update_on_no_tai:
-        return log_flops_needed_sample
+    output_requirements.append(log_flops_needed_sample)
 
-    compute_mu, compute_std = norm.fit(log_flops_needed_sample)
+    if update_on_no_tai:
+        compute_mu, compute_std = norm.fit(log_flops_needed_sample)
 
-    training_runs = [(np.log10(1e17), 8), (np.log10(1e23), 2), (np.log10(1e25), 1)]
+        training_runs = [(np.log10(1e17), 8), (np.log10(1e23), 2), (np.log10(1e25), 1)]
 
-    basic_model = pm.Model()
-    with basic_model:
-        # compute requirements at which it takes 1 year to produce AGI in expectation
-        compute_req_oom = pm.Normal("compute_req_oom", mu=compute_mu, sigma=compute_std)
-        decay_exponent = 0.3
+        basic_model = pm.Model()
+        with basic_model:
+            # compute requirements at which it takes 1 year to produce AGI in expectation
+            compute_req_oom = pm.Normal("compute_req_oom", mu=compute_mu, sigma=compute_std)
+            decay_exponent = 0.3
 
-        i = 1
-        for pair in training_runs:
-            (run_size, duration) = pair
-            poisson_mean = 10 ** (decay_exponent * (run_size - compute_req_oom))
-            agi_arrived = pm.Poisson("agi_arrived_" + str(i), mu=poisson_mean * duration, observed=0)
-            i += 1
+            i = 1
+            for pair in training_runs:
+                (run_size, duration) = pair
+                poisson_mean = 10 ** (decay_exponent * (run_size - compute_req_oom))
+                agi_arrived = pm.Poisson("agi_arrived_" + str(i), mu=poisson_mean * duration, observed=0)
+                i += 1
 
-    with basic_model:
-        idata = pm.sample(draws=samples, tune=2_000, cores=1, target_accept=0.99, progressbar=False, random_seed=RNG)
+        with basic_model:
+            idata = pm.sample(draws=samples, tune=2_000, cores=1, target_accept=0.99, progressbar=False, random_seed=RNG)
 
-    return log_flops_needed_sample, idata.posterior["compute_req_oom"].values[0]
+        output_requirements.append(idata.posterior["compute_req_oom"].values[0])
+
+    if scale_tai_requirements:
+        for output_reqs in list(output_requirements):
+            # moves the distribution down slighly, to account for the fact that the previously computed requirements are actually an upper bound
+            scaled_requirements = SCALE_TAI_REQS_SCALE_FACTOR * (output_reqs - SCALE_TAI_REQS_FIXED_POINT) + SCALE_TAI_REQS_FIXED_POINT
+            output_requirements.append(scaled_requirements)
+
+    return output_requirements
 
 
 def sample_timeline(

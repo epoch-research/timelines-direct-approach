@@ -36,8 +36,14 @@ POOL = None
 
 TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP required for TAI before adjustment'}
 ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP required for TAI after adjustment'}
-CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True,
+CUMULATIVE_ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True,
                                            'title': 'Cumulative distribution over effective FLOP required for TAI after adjustment'}
+SCALED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP required for TAI after scaling'}
+CUMULATIVE_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True,
+                                           'title': 'Cumulative distribution over effective FLOP required for TAI after scaling'}
+ADJUSTED_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'title': 'Distribution over effective FLOP required for TAI\n after adjustment and scaling'}
+CUMULATIVE_ADJUSTED_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS = {'x_lab': 'log(FLOP)', 'cumulative': True,
+                                           'title': 'Cumulative distribution over effective FLOP required for TAI\n after adjustment and scaling'}
 SPENDING_PLOT_PARAMS = {'y_lab': 'Largest Training Run ($)'}
 ALGORITHMIC_PROGRESS_PLOT_PARAMS = {'y_lab': 'Algorithmic progress multiplier'}
 FLOPS_PER_DOLLAR_PLOT_PARAMS = {'y_lab': 'FLOP/$'}
@@ -124,6 +130,7 @@ class TAIRequirementsParams(BaseModel):
     slowdown: DistributionCIParams
     k_performance: DistributionCIParams
     update_on_no_tai: bool
+    scale_distribution: bool
 
     @validator("slowdown", "k_performance", pre=True)
     def check_lower_bound_gt_zero(cls, value):
@@ -175,7 +182,10 @@ async def app_startup():
     with open('static/timeline-summary.json', 'w') as f:
         json.dump(summary, f)
 
-    plot_names = ['tai_requirements', 'adjusted_tai_requirements', 'cumulative_adjusted_tai_requirements',
+    plot_names = ['tai_requirements',
+                  'adjusted_tai_requirements', 'cumulative_adjusted_tai_requirements',
+                  'scaled_tai_requirements', 'cumulative_scaled_tai_requirements',
+                  'adjusted_scaled_tai_requirements', 'cumulative_adjusted_scaled_tai_requirements',
                   'algorithmic_progress', 'spending', 'flops_per_dollar', 'physical_flops', 'effective_flops',
                   'tai_timeline', 'tai_timeline_density']
 
@@ -292,14 +302,27 @@ def put_plot(fig: matplotlib.figure.Figure, q: Union[queue.SimpleQueue, mp.Queue
 
 
 def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queue]) -> Dict[str, List[str]]:
-    tai_requirements, adjusted_tai_requirements = timeline.tai_requirements(**{**timeline_params['tai_requirements'],
-                                                                               'update_on_no_tai': True})
+    tai_requirements, adjusted_tai_requirements, scaled_tai_requirements, adjusted_and_scaled_tai_requirements = timeline.tai_requirements(**{
+        **timeline_params['tai_requirements'],
+        'update_on_no_tai': True,
+        'scale_tai_requirements': True,
+    })
     put_plot(plot_tai_requirements(tai_requirements, **TAI_REQUIREMENTS_PLOT_PARAMS), q)
     put_plot(plot_tai_requirements(adjusted_tai_requirements, **ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements(adjusted_tai_requirements, **CUMULATIVE_TAI_REQUIREMENTS_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements(adjusted_tai_requirements, **CUMULATIVE_ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements(scaled_tai_requirements, **SCALED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements(scaled_tai_requirements, **CUMULATIVE_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements(adjusted_and_scaled_tai_requirements, **ADJUSTED_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
+    put_plot(plot_tai_requirements(adjusted_and_scaled_tai_requirements, **CUMULATIVE_ADJUSTED_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
 
     if timeline_params['tai_requirements']['update_on_no_tai']:
-        tai_requirements = adjusted_tai_requirements
+        if timeline_params['tai_requirements']['scale_tai_requirements']:
+            tai_requirements = adjusted_and_scaled_tai_requirements
+        else:
+            tai_requirements = adjusted_tai_requirements
+    else:
+        if timeline_params['tai_requirements']['scale_tai_requirements']:
+            tai_requirements = scaled_tai_requirements
 
     algorithmic_progress_timeline = timeline.algorithmic_improvements(**timeline_params['algorithmic_improvements'])
     put_plot(plot_timeline(algorithmic_progress_timeline, **ALGORITHMIC_PROGRESS_PLOT_PARAMS), q)
