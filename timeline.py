@@ -99,7 +99,7 @@ def flops_per_dollar(
 
 def algorithmic_improvements(
     # (24.6, 215.18) in percentages, converted to OOMs
-    algo_growth_rate: DistributionCI = DistributionCI('normal', 80, 0.35, 0.75).change_width(),
+    algo_growth_rate: DistributionCI = DistributionCI('normal', 80, 0.21, 0.65).change_width(),
     transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1).change_width(),
     algo_limit: DistributionCI = DistributionCI('lognormal', 80, 2.25, 12.1).change_width(),  # expressed in OOMs
     samples: int = NUM_SAMPLES,
