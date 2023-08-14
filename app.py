@@ -289,6 +289,7 @@ async def generate_timeline(websocket: WebSocket):
     await websocket.send_json(generate_timeline_process.result())
 
     logger.info(f"Generated {timeline_params['samples']} sample timeline "
+                f"with result {generate_timeline_process.result()} "
                 f"in {round(time.time() - start_time, 1)} seconds")
 
     await websocket.close()
