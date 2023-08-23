@@ -4,6 +4,7 @@
   - [ ] Add instructions about how to install dependencies
   - [ ] Add instructions about how to run the model in standalone mode
   - [ ] Add instructions about how to run the server locally without Docker
+  - [ ] Add instructions about Plots.ipynb
 
 Backend of Epoch's [Direct Approach Interactive Model post](https://epochai.org/blog/direct-approach-interactive-model).
 
