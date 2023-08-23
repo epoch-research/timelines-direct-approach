@@ -6,7 +6,7 @@ import numpy as np
 from scipy.stats import norm
 
 import gpu_efficiency
-from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain, resample_between, RNG
+from common import DistributionCI, Timeline, Distribution, NUM_SAMPLES, YEAR_OFFSETS, constrain, resample_between
 from k_performance import computation_for_k_performance
 
 
@@ -177,6 +177,7 @@ def tai_requirements(
                 i += 1
 
         with basic_model:
+            RNG = np.random.default_rng(np.random.randint(2**32))
             idata = pm.sample(draws=samples, tune=2_000, cores=1, target_accept=0.99, progressbar=False, random_seed=RNG)
 
         output_requirements.append(idata.posterior["compute_req_oom"].values[0])

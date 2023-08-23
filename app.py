@@ -2,6 +2,7 @@ import asyncio
 import io
 import os
 import json
+import random
 import logging
 import multiprocessing as mp
 import queue
@@ -31,7 +32,6 @@ seaborn.set_theme()
 matplotlib.use('AGG')
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'
 matplotlib.rcParams['axes.titlesize'] = 11.5
-np.random.seed(2024)
 
 POOL = None
 
@@ -176,6 +176,7 @@ async def app_startup():
     POOL = ProcessPoolExecutor()
 
     timeline_params = make_json_params_callable(DEFAULT_PARAMS)
+    timeline_params['seed'] = 2024
     summary = generate_and_save_timeline_plots(timeline_params, output_dir='static')
 
     with open('static/timeline-summary.json', 'w') as f:
@@ -204,6 +205,9 @@ def get_timeline_defaults():
 
 def make_json_params_callable(json_params):
     timeline_params = {'samples': json_params['samples']}
+    if 'seed' in json_params:
+        timeline_params['seed'] = json_params['seed']
+
     for timeline_function in ['spending', 'flops_per_dollar', 'algorithmic_improvements', 'tai_requirements']:
         timeline_params[timeline_function] = {'samples': json_params['samples']}
         for k in json_params[timeline_function]:
@@ -237,7 +241,11 @@ async def generate_timeline(websocket: WebSocket):
 
     json_params = json.loads(await websocket.receive_text())
     timeline_params = make_json_params_callable(json_params)
-    logger.info(f'Calculating with {json_params}')
+
+    if not 'seed' in timeline_params:
+        timeline_params['seed'] = random.SystemRandom().getrandbits(32)
+
+    logger.info(f'Calculating with {json_params} and seed {timeline_params["seed"]}')
 
     loop = asyncio.get_event_loop()
     manager = mp.Manager()
@@ -276,7 +284,7 @@ async def generate_timeline(websocket: WebSocket):
     # Send the timeline summary
     await websocket.send_json(generate_timeline_process.result())
 
-    logger.info(f"Generated {timeline_params['samples']} sample timeline "
+    logger.info(f"Generated {timeline_params['samples']} sample and {timeline_params['seed']} seed timeline "
                 f"with result {generate_timeline_process.result()} "
                 f"in {round(time.time() - start_time, 1)} seconds")
 
@@ -291,6 +299,10 @@ def put_plot(fig: matplotlib.figure.Figure, q: Union[queue.SimpleQueue, mp.Queue
 
 
 def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queue]) -> Dict[str, List[str]]:
+    if 'seed' in timeline_params:
+        # Let's do this the old way :(
+        np.random.seed(timeline_params['seed'])
+
     tai_requirements, adjusted_tai_requirements, scaled_tai_requirements, adjusted_and_scaled_tai_requirements = timeline.tai_requirements(**{
         **timeline_params['tai_requirements'],
         'update_on_no_tai': True,

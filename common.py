@@ -11,7 +11,6 @@ END_YEAR = 2101
 YEARS = list(range(START_YEAR, END_YEAR))
 YEAR_OFFSETS = list(range(END_YEAR - START_YEAR))
 NUM_SAMPLES = 20_000
-RNG = np.random.default_rng(2024)
 
 # Types
 Year = int
