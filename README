@@ -1,21 +1,46 @@
-# Deploying via ECR
-## Push to ECR
-1. Login to the ECR registry: `aws ecr get-login-password --profile epoch-david --region us-east-2 | docker login --username AWS --password-stdin 649526765752.dkr.ecr.us-east-2.amazonaws.com`
-2. Build the image: `docker build --platform linux/arm64 -t direct-approach-backend . && docker tag direct-approach-backend:latest 649526765752.dkr.ecr.us-east-2.amazonaws.com/direct-approach-backend:arm-latest`
-3. Push `docker push 649526765752.dkr.ecr.us-east-2.amazonaws.com/direct-approach-backend:arm-latest`
+# TODO
+  - [ ] Switch to Poetry
+  - [ ] Note about what the project uses (Poetry, Docker, FastAPI)
+  - [ ] Add instructions about how to install dependencies
+  - [ ] Add instructions about how to run the model in standalone mode
+  - [ ] Add instructions about how to run the server locally without Docker
 
-## Deploy to EC2
-1. Login to ECR: `sudo aws ecr get-login-password --region us-east-2 | sudo docker login --username AWS --password-stdin 649526765752.dkr.ecr.us-east-2.amazonaws.com`
-2. Pull the image: `sudo docker pull 649526765752.dkr.ecr.us-east-2.amazonaws.com/direct-approach-backend:arm-latest`
-3. Stop and remove the old image: `sudo docker stop timelines-backend && sudo docker rm timelines-backend`
-4. Start running the new image: `sudo docker run -dp 8000:8000 --name=timelines-backend 649526765752.dkr.ecr.us-east-2.amazonaws.com/direct-approach-backend:arm-latest`
-5. Pipe the logs to stdout: `sudo docker logs -f timelines-backend`
+Backend of Epoch's [Direct Approach Interactive Model post](https://epochai.org/blog/direct-approach-interactive-model).
 
-# Deploying via git
+![](docs/sample_tai_dist.png)
 
-1. Pull the repo
-2. In the `timelines-direct-approach` directory, run `sudo docker build -t direct-approach-backend .`
-3. Stop and remove the old image `sudo docker stop timelines-backend; sudo docker rm timelines-backend` (this might
-     fail if one of those steps is unnecessary. That's fine.)
-4. Start the new image running `sudo docker run -dp 8000:8000 --name=timelines-backend direct-approach-backend`
-5. Pipe the logs to stdout `sudo docker logs -f timelines-backend`
+# Standalone execution
+
+The easiest way to run the model is executing `run_standalone.py`. It will generate several graphs inside the `/plot` directory and print a summary of the output of the model.
+
+```
+$ python run_standalone.py
+
+Probability of TAI by…
+  2030: 29%
+  2050: 69%
+  2100: 79%
+
+Quantile
+  10%: 2026
+  Median: 2036
+  90%: >2100
+```
+
+# Deployment with Docker
+
+If you want to run the server in the same way we're doing for our website, you might want to follow these steps:
+
+```
+cd timelines-direct-approach
+sudo docker build -t direct-approach-backend .
+
+# Stop and remove the old image (this might fail if one of those steps is unnecessary. That's fine.)
+sudo docker stop timelines-backend; sudo docker rm timelines-backend
+
+# Start the new image running
+sudo docker run -dp 8000:8000 --name=timelines-backend direct-approach-backend
+
+# Pipe the logs to stdout
+sudo docker logs -f timelines-backend
+```
