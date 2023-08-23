@@ -7,7 +7,7 @@
 
 Backend of Epoch's [Direct Approach Interactive Model post](https://epochai.org/blog/direct-approach-interactive-model).
 
-![](docs/sample_tai_dist.png)
+![Sample TAI plot](doc/sample_tai_dist.png)
 
 # Standalone execution
 
