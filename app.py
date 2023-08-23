@@ -1,5 +1,6 @@
 import asyncio
 import io
+import os
 import json
 import logging
 import multiprocessing as mp
@@ -174,24 +175,11 @@ async def app_startup():
     global POOL
     POOL = ProcessPoolExecutor()
 
-    q = queue.SimpleQueue()
-
     timeline_params = make_json_params_callable(DEFAULT_PARAMS)
-    summary = generate_timeline_plots(timeline_params, q)
+    summary = generate_and_save_timeline_plots(timeline_params, output_dir='static')
 
     with open('static/timeline-summary.json', 'w') as f:
         json.dump(summary, f)
-
-    plot_names = ['tai_requirements',
-                  'adjusted_tai_requirements', 'cumulative_adjusted_tai_requirements',
-                  'scaled_tai_requirements', 'cumulative_scaled_tai_requirements',
-                  'adjusted_scaled_tai_requirements', 'cumulative_adjusted_scaled_tai_requirements',
-                  'algorithmic_progress', 'spending', 'flops_per_dollar', 'physical_flops', 'effective_flops',
-                  'tai_timeline', 'tai_timeline_density']
-
-    for plot_name in plot_names:
-        with open(f'static/{plot_name}.png', 'wb') as f:
-            f.write(q.get())
 
     app.mount("/static", StaticFiles(directory="static"), name="static")
     logger.info("Static files mounted")
@@ -347,6 +335,33 @@ def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queu
     put_plot(plot_tai_timeline_density(arrivals, median_arrival, **TAI_TIMELINE_DENSITY_PLOT_PARAMS), q)
 
     return timeline_summary(tai_timeline)
+
+
+def generate_and_save_timeline_plots(timeline_params=None, output_dir: str = None) -> Dict[str, List[str]]:
+    if output_dir is None:
+        raise ValueError("Missing argument 'output_dir'")
+
+    if timeline_params is None:
+        timeline_params = make_json_params_callable(DEFAULT_PARAMS)
+
+    q = queue.SimpleQueue()
+
+    summary = generate_timeline_plots(timeline_params, q)
+
+    plot_names = ['tai_requirements',
+                  'adjusted_tai_requirements', 'cumulative_adjusted_tai_requirements',
+                  'scaled_tai_requirements', 'cumulative_scaled_tai_requirements',
+                  'adjusted_scaled_tai_requirements', 'cumulative_adjusted_scaled_tai_requirements',
+                  'algorithmic_progress', 'spending', 'flops_per_dollar', 'physical_flops', 'effective_flops',
+                  'tai_timeline', 'tai_timeline_density']
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    for plot_name in plot_names:
+        with open(f'{output_dir}/{plot_name}.png', 'wb') as f:
+            f.write(q.get())
+
+    return summary
 
 
 def timeline_summary(tai_timeline: common.Timeline) -> Dict[str, List[str]]:
