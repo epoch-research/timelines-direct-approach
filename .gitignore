@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# Vim files
+.*.sw?
+
 # Distribution / packaging
 .Python
 build/
@@ -128,4 +131,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Misc
 certs/
+static/
+plots/
+.vscode
