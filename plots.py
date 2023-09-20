@@ -71,7 +71,7 @@ def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab
 def plot_tai_requirements(tai_requirements: common.Distribution, x_lab: str,
                           title: str, cumulative: bool = False) -> Figure:
     plot_fig, plot_ax = plt.subplots()
-    sns.histplot(tai_requirements, kde=True, ax=plot_ax, stat='probability', binwidth=1, cumulative=cumulative)
+    sns.histplot(tai_requirements, kde=True, ax=plot_ax, stat='probability', binwidth=1, cumulative=cumulative, legend=False)
     plot_ax.set_xlabel(x_lab)
     plot_ax.set_title(title)
 
