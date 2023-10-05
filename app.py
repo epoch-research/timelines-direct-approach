@@ -13,6 +13,7 @@ from typing import TypedDict, Literal
 from typing import Dict, List, Union
 
 import matplotlib
+import peplot.egrapher as eg
 import seaborn
 import numpy as np
 from fastapi import FastAPI, Request, HTTPException
@@ -25,13 +26,14 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 import common
 import timeline
-from plots import plot_timeline, plot_tai_requirements, plot_tai_timeline, plot_tai_timeline_density
+from plots import plot_timeline, plot_tai_requirements, plot_tai_timeline, plot_tai_timeline_density, PlotFormat
 
 
 seaborn.set_theme()
 matplotlib.use('AGG')
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'
 matplotlib.rcParams['axes.titlesize'] = 11.5
+
 
 POOL = None
 
@@ -62,6 +64,7 @@ DEFAULT_PARAMS = {
     'algorithmic_improvements': timeline.get_default_params(timeline.algorithmic_improvements),
     'tai_requirements': timeline.get_default_params(timeline.tai_requirements),
 }
+
 
 logging.basicConfig(
     handlers=[logging.FileHandler("timelines_backend.log"), logging.StreamHandler()],
@@ -205,8 +208,12 @@ def get_timeline_defaults():
 
 def make_json_params_callable(json_params):
     timeline_params = {'samples': json_params['samples']}
+
     if 'seed' in json_params:
         timeline_params['seed'] = json_params['seed']
+
+    if 'plot_format' in json_params:
+        timeline_params['plot_format'] = PlotFormat[json_params['plot_format'].upper()]
 
     for timeline_function in ['spending', 'flops_per_dollar', 'algorithmic_improvements', 'tai_requirements']:
         timeline_params[timeline_function] = {'samples': json_params['samples']}
@@ -245,6 +252,11 @@ async def generate_timeline(websocket: WebSocket):
     if not 'seed' in timeline_params:
         timeline_params['seed'] = random.SystemRandom().getrandbits(32)
 
+    plot_format = PlotFormat.EPOCH
+    if 'plot_format' in timeline_params:
+        plot_format = timeline_params['plot_format']
+        del timeline_params['plot_format']
+
     logger.info(f'Calculating with {json_params} and seed {timeline_params["seed"]}')
 
     loop = asyncio.get_event_loop()
@@ -252,7 +264,7 @@ async def generate_timeline(websocket: WebSocket):
     q = manager.Queue()
 
     try:
-        generate_timeline_process = loop.run_in_executor(POOL, generate_timeline_plots, timeline_params, q)
+        generate_timeline_process = loop.run_in_executor(POOL, generate_timeline_plots, timeline_params, q, plot_format)
     except BrokenProcessPool:
         logger.error('Process pool is broken. Restarting executor.')
         POOL.shutdown(wait=True)
@@ -291,14 +303,18 @@ async def generate_timeline(websocket: WebSocket):
     await websocket.close()
 
 
-def put_plot(fig: matplotlib.figure.Figure, q: Union[queue.SimpleQueue, mp.Queue]):
-    with io.BytesIO() as f:
-        fig.savefig(f, dpi=200)
-        q.put(f.getvalue())
-    matplotlib.pyplot.close(fig)
+def put_plot(fig: Union[matplotlib.figure.Figure, eg.EpochGraph], q: Union[queue.SimpleQueue, mp.Queue]):
+    if isinstance(fig, matplotlib.figure.Figure):
+        with io.BytesIO() as f:
+            fig.savefig(f, dpi=200)
+            q.put(f.getvalue())
+        matplotlib.pyplot.close(fig)
+    else:
+        q.put(bytes(fig.export(), 'utf-8'))
 
 
-def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queue]) -> Dict[str, List[str]]:
+def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queue],
+        formats: Union[PlotFormat, List[PlotFormat]] = PlotFormat.MATPLOTLIB) -> Dict[str, List[str]]:
     if 'seed' in timeline_params:
         # Let's do this the old way :(
         np.random.seed(timeline_params['seed'])
@@ -308,43 +324,52 @@ def generate_timeline_plots(timeline_params, q: Union[queue.SimpleQueue, mp.Queu
         'update_on_no_tai': True,
         'scale_tai_requirements': True,
     })
-    put_plot(plot_tai_requirements(tai_requirements, **TAI_REQUIREMENTS_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements(adjusted_tai_requirements, **ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements(adjusted_tai_requirements, **CUMULATIVE_ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements(scaled_tai_requirements, **SCALED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements(scaled_tai_requirements, **CUMULATIVE_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements(adjusted_and_scaled_tai_requirements, **ADJUSTED_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
-    put_plot(plot_tai_requirements(adjusted_and_scaled_tai_requirements, **CUMULATIVE_ADJUSTED_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS), q)
+
+    adjusted_requirements = tai_requirements
 
     if timeline_params['tai_requirements']['update_on_no_tai']:
         if timeline_params['tai_requirements']['scale_tai_requirements']:
-            tai_requirements = adjusted_and_scaled_tai_requirements
+            adjusted_requirements = adjusted_and_scaled_tai_requirements
         else:
-            tai_requirements = adjusted_tai_requirements
+            adjusted_requirements = adjusted_tai_requirements
     else:
         if timeline_params['tai_requirements']['scale_tai_requirements']:
-            tai_requirements = scaled_tai_requirements
+            adjusted_requirements = scaled_tai_requirements
 
     algorithmic_progress_timeline = timeline.algorithmic_improvements(**timeline_params['algorithmic_improvements'])
-    put_plot(plot_timeline(algorithmic_progress_timeline, **ALGORITHMIC_PROGRESS_PLOT_PARAMS), q)
 
     investment_timeline = timeline.spending(**timeline_params['spending'])
-    put_plot(plot_timeline(investment_timeline, **SPENDING_PLOT_PARAMS), q)
 
     flops_per_dollar_timeline = timeline.flops_per_dollar(**timeline_params['flops_per_dollar'])
     physical_flops_timeline = flops_per_dollar_timeline + investment_timeline
     effective_compute_timeline = physical_flops_timeline + algorithmic_progress_timeline
 
-    put_plot(plot_timeline(flops_per_dollar_timeline, **FLOPS_PER_DOLLAR_PLOT_PARAMS), q)
-    put_plot(plot_timeline(physical_flops_timeline, **PHYSICAL_FLOPS_PLOT_PARAMS), q)
-    put_plot(plot_timeline(effective_compute_timeline, **EFFECTIVE_FLOPS_PLOT_PARAMS), q)
-
-    arrivals = effective_compute_timeline.T > tai_requirements
+    arrivals = effective_compute_timeline.T > adjusted_requirements
     tai_timeline = np.sum(arrivals, axis=1) / timeline_params['samples']
     median_arrival = quantile(tai_timeline, 0.5)
 
-    put_plot(plot_tai_timeline(tai_timeline, median_arrival, **TAI_TIMELINE_PLOT_PARAMS), q)
-    put_plot(plot_tai_timeline_density(arrivals, median_arrival, **TAI_TIMELINE_DENSITY_PLOT_PARAMS), q)
+    if not isinstance(formats, list):
+        formats = [formats]
+
+    for format in formats:
+        put_plot(plot_tai_requirements(tai_requirements, **TAI_REQUIREMENTS_PLOT_PARAMS, format=format), q)
+        put_plot(plot_tai_requirements(adjusted_tai_requirements, **ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS, format=format), q)
+        put_plot(plot_tai_requirements(adjusted_tai_requirements, **CUMULATIVE_ADJUSTED_TAI_REQUIREMENTS_PLOT_PARAMS, format=format), q)
+        put_plot(plot_tai_requirements(scaled_tai_requirements, **SCALED_TAI_REQUIREMENTS_PLOT_PARAMS, format=format), q)
+        put_plot(plot_tai_requirements(scaled_tai_requirements, **CUMULATIVE_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS, format=format), q)
+        put_plot(plot_tai_requirements(adjusted_and_scaled_tai_requirements, **ADJUSTED_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS, format=format), q)
+        put_plot(plot_tai_requirements(adjusted_and_scaled_tai_requirements, **CUMULATIVE_ADJUSTED_SCALED_TAI_REQUIREMENTS_PLOT_PARAMS, format=format), q)
+
+        put_plot(plot_timeline(algorithmic_progress_timeline, **ALGORITHMIC_PROGRESS_PLOT_PARAMS, format=format), q)
+
+        put_plot(plot_timeline(investment_timeline, **SPENDING_PLOT_PARAMS, format=format), q)
+
+        put_plot(plot_timeline(flops_per_dollar_timeline, **FLOPS_PER_DOLLAR_PLOT_PARAMS, format=format), q)
+        put_plot(plot_timeline(physical_flops_timeline, **PHYSICAL_FLOPS_PLOT_PARAMS, format=format), q)
+        put_plot(plot_timeline(effective_compute_timeline, **EFFECTIVE_FLOPS_PLOT_PARAMS, format=format), q)
+
+        put_plot(plot_tai_timeline(tai_timeline, median_arrival, **TAI_TIMELINE_PLOT_PARAMS, format=format), q)
+        put_plot(plot_tai_timeline_density(arrivals, median_arrival, **TAI_TIMELINE_DENSITY_PLOT_PARAMS, format=format), q)
 
     return timeline_summary(tai_timeline)
 
@@ -358,7 +383,7 @@ def generate_and_save_timeline_plots(timeline_params=None, output_dir: str = Non
 
     q = queue.SimpleQueue()
 
-    summary = generate_timeline_plots(timeline_params, q)
+    summary = generate_timeline_plots(timeline_params, q, formats=[PlotFormat.MATPLOTLIB, PlotFormat.EPOCH])
 
     plot_names = ['tai_requirements',
                   'adjusted_tai_requirements', 'cumulative_adjusted_tai_requirements',
@@ -369,8 +394,14 @@ def generate_and_save_timeline_plots(timeline_params=None, output_dir: str = Non
 
     os.makedirs(output_dir, exist_ok=True)
 
+    # Save Matplotlib plots
     for plot_name in plot_names:
         with open(f'{output_dir}/{plot_name}.png', 'wb') as f:
+            f.write(q.get())
+
+    # Save Epoch plots
+    for plot_name in plot_names:
+        with open(f'{output_dir}/{plot_name}.json', 'wb') as f:
             f.write(q.get())
 
     return summary
