@@ -14,4 +14,4 @@ scipy = "*"
 statsmodels = "*"
 seaborn = "*"
 pymc = "*"
-peplot = {url = "https://plot-redesign-wediywqnfa05wi3v.web.app/peplot/peplot-0.1.0-py3-none-any.whl"}
+peplot = {file = "https://plot-redesign-wediywqnfa05wi3v.web.app/peplot/peplot-0.1.0-py3-none-any.whl"}
