@@ -96,6 +96,7 @@ def plot_tai_requirements(tai_requirements: common.Distribution, x_lab: str,
 def reformat(fig: Figure, format: PlotFormat) -> Union[Figure, eg.EpochGraph]:
     if format == PlotFormat.EPOCH:
         g = eg.to_epoch_graph(fig, keep_fig_size=True, keep_limits=True)
+        g.add_data_padding(False)
         g.frame(True)
         g.legend(True)
 
