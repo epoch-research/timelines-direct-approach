@@ -8,7 +8,7 @@ python_version = '3.11'
 
 [packages]
 numpy = "*"
-pandas = "*"
+pandas = "==1.5.3"
 fastapi = {extras = ["all"], version = "*"}
 scipy = "*"
 statsmodels = "*"
