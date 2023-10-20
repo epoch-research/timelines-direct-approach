@@ -18,7 +18,7 @@ def spending(
     samples: int = NUM_SAMPLES,
     # from Ben's estimate of 0.1 to 0.3 OOMs per year in https://epochai.org/blog/trends-in-the-dollar-training-cost-of-machine-learning-systems#appendix-i-overall-best-guess-for-the-growth-rate-in-training-cost:~:text=my%20all%2Dthings%2Dconsidered%20view%20is%200.2%20OOMs/year%20(90%25%20CI%3A%200.1%20to%200.3%20OOMs/year
     # For ref: Epoch staff aggregate: DistributionCI('normal', 70, 1.1480341, 3.278781)
-    invest_growth_rate: DistributionCI = DistributionCI('normal', 90, 25.9, 99.5).change_width(),
+    invest_growth_rate: DistributionCI = DistributionCI('normal', 80, 146, 246).change_width(),
     # 116_639_700 in 2023 -> 237_830_800 in 2060 -> 1.9% per year
     gwp_growth_rate: DistributionCI = DistributionCI('normal', 80, 0.4, 4.75).change_width(),
     # Ben's estimate (ie 0.004% to 5%) (Matthew's estimate: DistributionCI('lognormal', 70, 0.0000083, 0.014047))
@@ -99,7 +99,7 @@ def flops_per_dollar(
 
 def algorithmic_improvements(
     # (24.6, 215.18) in percentages, converted to OOMs
-    algo_growth_rate: DistributionCI = DistributionCI('normal', 80, 0.21, 0.65).change_width(),
+    algo_growth_rate: DistributionCI = DistributionCI('normal', 80, 0.244, 0.775).change_width(),
     transfer_multiplier: DistributionCI = DistributionCI('lognormal', 70, 0.4, 1.1).change_width(),
     algo_limit: DistributionCI = DistributionCI('lognormal', 80, 2.25, 12.1).change_width(),  # expressed in OOMs
     samples: int = NUM_SAMPLES,
