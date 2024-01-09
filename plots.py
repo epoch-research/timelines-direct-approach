@@ -54,15 +54,18 @@ def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab
     new_arrivals = np.array([cur - prev for prev, cur in zip([0] + arrival_counts, arrival_counts)])
     arrival_years = [year for year, count in zip(common.YEARS, new_arrivals) for _ in range(count)]
 
+    p_arrival_in_century = arrival_counts[-1] / samples
+    histplot_weight = p_arrival_in_century/len(arrival_years)
+
     plot_fig, plot_ax = plt.subplots()
-    sns.histplot(arrival_years, kde=True, ax=plot_ax, stat='probability', binwidth=1)
+    plot_ax = sns.histplot(x=arrival_years, kde=True, ax=plot_ax, stat='frequency', binwidth=1, weights=[histplot_weight for _ in arrival_years])
 
     median_label = '>2100' if np.isnan(median_arrival) else f'median ({median_arrival:.0f})'
     plt.axvline(median_arrival, c='red', linestyle='dashed', label=median_label)
 
     # Box to highlight the amount of density that's truncated
     missing_density = round(100 * (1 - arrival_counts[-1] / samples), 1)
-    max_density_under_box = max(new_arrivals[2069-2023:] / samples)
+    max_density_under_box = max(new_arrivals[2069-common.YEARS[0]:] / samples)
     plot_ax.text(2069, max_density_under_box + 0.01, f"P(TAI > 2100) = {missing_density}%\n",
                  bbox=dict(boxstyle="round, rounding_size=0.2", facecolor='white', alpha=0.1, edgecolor='black'))
     plot_ax.arrow(2090, max_density_under_box + 0.0105, dx=8, dy=0, edgecolor='black', facecolor='black',
