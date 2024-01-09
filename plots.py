@@ -52,10 +52,6 @@ def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab
     plot_fig, plot_ax = plt.subplots()
     plot_ax = sns.histplot(x=arrival_years, kde=True, ax=plot_ax, stat='frequency', binwidth=1, weights=[histplot_weight for _ in arrival_years])
 
-    total_area = sum(p.get_height() * p.get_width() for p in plot_ax.patches)
-    print("Total area under the histogram:", total_area)
-    print("Expected area:", p_arrival_in_century)
-
     median_label = '>2100' if np.isnan(median_arrival) else f'median ({median_arrival:.0f})'
     plt.axvline(median_arrival, c='red', linestyle='dashed', label=median_label)
 
