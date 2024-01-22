@@ -9,8 +9,9 @@ import queue
 import time
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
-from typing import TypedDict, Literal
+from typing import Literal
 from typing import Dict, List, Union
+from typing_extensions import TypedDict
 
 import matplotlib
 import seaborn

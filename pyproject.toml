@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "timelines-direct-approach"
+version = "0.1.0"
+authors = []
+description = ""
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.12"
+pymc = "^5.10.3"
+statsmodels = "^0.14.1"
+pandas = "1.5.3"
+fastapi = "^0.109.0"
+uvicorn = "^0.26.0"
+seaborn = "^0.13.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
