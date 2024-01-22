@@ -12,7 +12,8 @@ statsmodels = "^0.14.1"
 pandas = "1.5.3"
 fastapi = "^0.109.0"
 uvicorn = "^0.26.0"
-seaborn = "^0.13.1"
+seaborn = "^0.12.2"
+peplot = {url = "https://plot-redesign-wediywqnfa05wi3v.web.app/peplot/peplot-0.1.0-py3-none-any.whl"}
 
 [build-system]
 requires = ["poetry-core"]
