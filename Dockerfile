@@ -11,6 +11,7 @@ RUN python -m pip install --upgrade pip
 RUN pip install pipenv
 
 COPY Pipfile Pipfile.lock ./
+RUN pipenv lock --verbose
 RUN pipenv install --dev --system --deploy
 
 COPY app.py ./

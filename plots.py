@@ -5,11 +5,19 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib.figure import Figure
+from enum import Enum
+import peplot.egrapher as eg
+from typing import Union
 
 import common
 
 
-def plot_timeline(tl: common.Timeline, y_lab: str, errorbar_interval: int = 90) -> Figure:
+class PlotFormat(Enum):
+    MATPLOTLIB = 0
+    EPOCH = 1
+
+
+def plot_timeline(tl: common.Timeline, y_lab: str, errorbar_interval: int = 90, format: PlotFormat = PlotFormat.MATPLOTLIB) -> Figure:
     plot_fig, plot_ax = plt.subplots()
 
     rotated = np.vstack([np.array(list(zip(itertools.repeat(idx + common.START_YEAR), tl[:, idx])))
@@ -20,10 +28,10 @@ def plot_timeline(tl: common.Timeline, y_lab: str, errorbar_interval: int = 90) 
     })
     sns.lineplot(df, x='Year', y=y_lab, errorbar=('pi', errorbar_interval), estimator='median', ax=plot_ax)
     plot_ax.set_yscale('log')
-    return plot_fig
+    return reformat(plot_fig, format)
 
 
-def plot_tai_timeline(tai_timeline, median_arrival: float, x_lab: str, y_lab: str, title: str) -> Figure:
+def plot_tai_timeline(tai_timeline, median_arrival: float, x_lab: str, y_lab: str, title: str, format: PlotFormat = PlotFormat.MATPLOTLIB) -> Figure:
     plot_fig, plot_ax = plt.subplots()
 
     sns.lineplot(pd.DataFrame({
@@ -37,10 +45,10 @@ def plot_tai_timeline(tai_timeline, median_arrival: float, x_lab: str, y_lab: st
     plt.legend()
     plot_ax.set_title(title)
 
-    return plot_fig
+    return reformat(plot_fig, format)
 
 
-def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab: str, title: str) -> Figure:
+def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab: str, title: str, format: PlotFormat = PlotFormat.MATPLOTLIB) -> Figure:
     samples = arrivals.shape[1]
     arrival_counts = list(np.sum(arrivals, axis=1))
     new_arrivals = np.array([cur - prev for prev, cur in zip([0] + arrival_counts, arrival_counts)])
@@ -70,14 +78,44 @@ def plot_tai_timeline_density(arrivals, median_arrival: float, x_lab: str, y_lab
     plot_ax.set_ylabel(y_lab)
     plot_ax.set_title(title)
 
-    return plot_fig
+    refig = reformat(plot_fig, format)
+
+    if format == PlotFormat.EPOCH:
+        text = refig.select(type='text')
+        refig.text_box(text.text, position='top-right')
+        refig.desc.objects.remove(text)
+
+    return refig
 
 
 def plot_tai_requirements(tai_requirements: common.Distribution, x_lab: str,
-                          title: str, cumulative: bool = False) -> Figure:
+                          title: str, cumulative: bool = False, format: PlotFormat = PlotFormat.MATPLOTLIB) -> Figure:
     plot_fig, plot_ax = plt.subplots()
     sns.histplot(tai_requirements, kde=True, ax=plot_ax, stat='probability', binwidth=1, cumulative=cumulative, legend=False)
     plot_ax.set_xlabel(x_lab)
     plot_ax.set_title(title)
 
-    return plot_fig
+    return reformat(plot_fig, format)
+
+
+def reformat(fig: Figure, format: PlotFormat) -> Union[Figure, eg.EpochGraph]:
+    if format == PlotFormat.EPOCH:
+        g = eg.to_epoch_graph(fig, keep_fig_size=True, keep_limits=True)
+        g.add_data_padding(False)
+        g.frame(True)
+        g.legend(True)
+
+        has_polygon = False
+        for object in g.selectAll(type='polygon'):
+            object.alpha = 0.4
+            object.color = '#00A5A6'
+            has_polygon = True
+        
+        if has_polygon:
+            g.select(type='line').color = '#034752'
+
+        plt.close(fig)
+
+        return g
+    else:
+        return fig
