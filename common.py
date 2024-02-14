@@ -40,6 +40,8 @@ class DistributionCI:
                 return (self.interval_min + self.interval_max) / 2
             case 'lognormal':
                 return (np.log(self.interval_min) + np.log(self.interval_max)) / 2
+            case 'delta':
+                return self.interval_min
 
     def sigma(self):
         match self.distribution:
@@ -47,6 +49,8 @@ class DistributionCI:
                 return (self.mu() - self.interval_min) / norm.interval(self.interval_width / 100)[1]
             case 'lognormal':
                 return (self.mu() - np.log(self.interval_min)) / norm.interval(self.interval_width / 100)[1]
+            case 'delta':
+                return 0
 
     def sample(self, samples: int) -> npt.NDArray[np.float64]:
         if self.distribution != 'delta':
