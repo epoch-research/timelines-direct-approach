@@ -24,7 +24,7 @@ Timeline = npt.NDArray[np.float64]
 class DistributionCI:
     def __init__(self, distribution: DistributionName, interval_width: float, interval_min: float, interval_max: float):
         assert interval_min <= interval_max, 'interval_min must be less than or equal to interval_max'
-        assert distribution in ('normal', 'lognormal'), 'Unsupported distribution'
+        assert distribution in ('normal', 'lognormal', 'delta'), 'Unsupported distribution'
 
         self.distribution = distribution
         self.interval_width = interval_width
@@ -49,12 +49,16 @@ class DistributionCI:
                 return (self.mu() - np.log(self.interval_min)) / norm.interval(self.interval_width / 100)[1]
 
     def sample(self, samples: int) -> npt.NDArray[np.float64]:
-        assert 0 < self.interval_width < 100, 'interval_width must be a positive number representing a confidence interval'
+        if self.distribution != 'delta':
+            assert 0 < self.interval_width < 100, 'interval_width must be a positive number representing a confidence interval'
+
         match self.distribution:
             case 'normal':
                 return np.random.normal(self.mu(), self.sigma(), samples)
             case 'lognormal':
                 return np.random.lognormal(self.mu(), self.sigma(), samples)
+            case 'delta':
+                return np.full(samples, self.interval_min)
 
     def params(self) -> dict:
         return {
