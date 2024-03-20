@@ -105,9 +105,9 @@ def constrain(*, value: float, limit: float) -> float:
 def resample_between(samples: npt.NDArray[np.float64], min: Optional[float] = None, max: Optional[float] = None):
     assert min is not None or max is not None
     condition = np.full(samples.shape, True)
-    if min:
+    if min is not None:
         condition = condition & (samples > min)
-    if max:
+    if max is not None:
         condition = condition & (samples < max)
 
     matching_samples = samples[condition]
