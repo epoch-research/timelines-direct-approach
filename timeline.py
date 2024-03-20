@@ -25,7 +25,9 @@ def spending(
     max_gwp_pct: DistributionCI = DistributionCI('lognormal', 95, 0.004, 5).change_width(),
     starting_gwp: float = 1.17e14,
     # millions of dollars
-    starting_max_spend: float = 60,
+    starting_max_spend: Union[float, DistributionCI] = 60,
+    # should the first year correspond to the initial spending?
+    begin_at_initial_spending: bool = False,
 ) -> Timeline:
     """
     We assume that the current maximum amount people are willing to spend on a training run is $100 million, which will
@@ -38,17 +40,30 @@ def spending(
     # Again, the growth rate can be negative, but the multiplier needs to be positive
     gwp_growth_multiplier_samples = np.log10(resample_between(1 + (gwp_growth_rate.sample(samples) / 100), min=0))
 
+    if isinstance(starting_max_spend, DistributionCI):
+        starting_max_spends = starting_max_spend.sample(samples)
+        starting_max_spends = resample_between(starting_max_spends, min=0)
+    else:
+        starting_max_spends = np.full(samples, starting_max_spend)
+
     spending_rollouts = []
     for i in range(samples):
         spending_rollouts.append([])
         gwp = np.log10(starting_gwp)
-        max_spend = np.log10(starting_max_spend * 1e6)  # convert to millions
+        max_spend = np.log10(starting_max_spends[i] * 1e6)  # convert to millions
+
+        if begin_at_initial_spending:
+            spending_rollouts[i].append(max_spend)
+
         for _ in YEAR_OFFSETS:
             max_spend += invest_growth_multiplier_samples[i]
             gwp += gwp_growth_multiplier_samples[i]
             dollar_limit = gwp + max_gwp_pct_samples[i]
             constrained = constrain(value=max_spend, limit=dollar_limit)
             spending_rollouts[i].append(np.log10(max(1e-10, constrained)))
+
+        if begin_at_initial_spending:
+            spending_rollouts[i] = spending_rollouts[i][:-1]
 
     return np.stack(spending_rollouts)
 
