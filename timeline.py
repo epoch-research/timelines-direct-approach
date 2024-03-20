@@ -25,7 +25,7 @@ def spending(
     max_gwp_pct: DistributionCI = DistributionCI('lognormal', 95, 0.004, 5).change_width(),
     starting_gwp: float = 1.17e14,
     # millions of dollars
-    starting_max_spend: Union[float, DistributionCI] = 60,
+    starting_max_spend: Union[float, tuple[float], DistributionCI] = 60,
     # should the first year correspond to the initial spending?
     begin_at_initial_spending: bool = False,
 ) -> Timeline:
@@ -43,8 +43,10 @@ def spending(
     if isinstance(starting_max_spend, DistributionCI):
         starting_max_spends = starting_max_spend.sample(samples)
         starting_max_spends = resample_between(starting_max_spends, min=0)
-    else:
+    elif isinstance(starting_max_spend, float):
         starting_max_spends = np.full(samples, starting_max_spend)
+    else:
+        starting_max_spends = starting_max_spend
 
     spending_rollouts = []
     for i in range(samples):
