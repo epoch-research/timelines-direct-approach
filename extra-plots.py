@@ -22,11 +22,15 @@ def spending_plot():
     gemini_price_per_hour = DistributionCI('lognormal', 90, 1.89, 5.40).change_width().sample(NUM_SAMPLES) # $/hour
     gemini_compute_per_hour = 3600 * 9.9e14 * DistributionCI('lognormal', 90, 0.2, 0.4).change_width().sample(NUM_SAMPLES) # FLOP/h
     starting_max_spend_samples = gemini_compute / gemini_compute_per_hour * gemini_price_per_hour
+    starting_max_spend_samples /= 1e6 # in million dollars
+
+    median = np.quantile(DistributionCI('lognormal', 90, 1.5e8/1e6, 1.7e9/1e6).change_width().sample(NUM_SAMPLES), 0.5)
+    print(median)
 
     spending_params = {
         'samples': NUM_SAMPLES,
         'starting_gwp': 1.17e14,
-        'starting_max_spend': starting_max_spend_samples / 1e6, # in million dollars
+        'starting_max_spend': DistributionCI('lognormal', 90, 1.5e8/1e6, 1.7e9/1e6).change_width(),
         'invest_growth_rate': DistributionCI('normal', 90, 180, 270).change_width(),
         'gwp_growth_rate': DistributionCI('normal', 80, 0.4, 4).change_width(),
         'max_gwp_pct': DistributionCI('lognormal', 80, 0.01, 2).change_width(),
@@ -45,7 +49,9 @@ def spending_plot():
     plt.fill_between(years, q_05, q_95, alpha=0.2)
 
     plt.yscale('log')
-    plt.title('Cost of Training Notable Machine Learning Models')
+    plt.ylabel('Largest Training Run ($)')
+    plt.xlabel('Year')
+    plt.title('Cost of Training Frontier Machine Learning Models')
     plt.xlim(2024 - 0.1, 2030)
 
     suffixes = {
@@ -64,16 +70,16 @@ def spending_plot():
 
     plt.yticks(ticks, tick_labels)
 
-    plt.ylim(1e7, 1e12)
+    plt.ylim(1e8, 1e12)
 
     # Save as regular figure
     fig.savefig('output/spending.svg')
 
     # Save as Epoch figure
     epoch_fig = reformat(fig, PlotFormat.EPOCH)
-    epoch_fig.caption('Extrapolated inflation-adjusted amortized hardware costs of the computational resources needed to train notable machine learning models, based on the data from 125 systems between 2010 and 2023.')
+    epoch_fig.caption('Extrapolated inflation-adjusted hardware purchase costs of the computational resources needed to train frontier machine learning models, based on the data from 125 systems between 2010 and 2023.')
     epoch_fig.y_ticks(ticks, tick_labels)
-    epoch_fig.export(format='figure', filename='spending.json')
+    epoch_fig.export(format='figure', filename='output/spending.json')
 
     # Save to CSV
     clip_index = np.where(years == 2030)[0][0]
