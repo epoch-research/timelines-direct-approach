@@ -15,7 +15,7 @@ Backend of Epoch's [Direct Approach Interactive Model post](https://epochai.org/
 The easiest way to run the model is executing `run_standalone.py`. It will generate several graphs inside the `/plot` directory and print a summary of the output of the model.
 
 ```
-$ python run_standalone.py
+$ poetry python run_standalone.py
 
 Probability of TAI by…
   2030: 29%
