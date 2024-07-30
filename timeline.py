@@ -43,7 +43,7 @@ def spending(
     if isinstance(starting_max_spend, DistributionCI):
         starting_max_spends = starting_max_spend.sample(samples)
         starting_max_spends = resample_between(starting_max_spends, min=0)
-    elif isinstance(starting_max_spend, float):
+    elif isinstance(starting_max_spend, (float, int)):
         starting_max_spends = np.full(samples, starting_max_spend)
     else:
         starting_max_spends = starting_max_spend
