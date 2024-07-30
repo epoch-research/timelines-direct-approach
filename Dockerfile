@@ -8,15 +8,13 @@ RUN mkdir static
 RUN apt-get update
 RUN apt-get install libopenblas-dev -y
 RUN python -m pip install --upgrade pip
-RUN pip install pipenv
+RUN pip install poetry
 
-COPY Pipfile Pipfile.lock ./
-RUN pipenv lock --verbose
-RUN pipenv install --dev --system --deploy
+COPY pyproject.toml poetry.lock ./
+RUN poetry install --only main --no-root
 
 COPY app.py ./
-COPY certs certs
 COPY data data
 COPY *.py ./
 
-CMD ["pipenv", "run", "uvicorn", "--host", "0.0.0.0", "--port", "8000", "--ssl-keyfile", "certs/privkey.pem", "--ssl-certfile", "certs/fullchain.pem", "app:app"]
+CMD ["poetry", "run", "uvicorn", "--host", "0.0.0.0", "--port", "8000", "app:app"]
