@@ -1,9 +1,13 @@
 """ Code written by Matthew Barnett """
 import numpy as np
 
+A_param = 482.01
+B_param = 2085.43
+alpha_param = 0.3478
+beta_param = 0.3658
 
 # Scaling law from Hoffmann et al.
-def KL_divergence(N, D, A=406.4, B=410.7, alpha=0.34, beta=0.28):
+def KL_divergence(N, D, A=A_param, B=B_param, alpha=alpha_param, beta=beta_param):
     return A/(N**alpha) + B/(D**beta)
 
 
@@ -17,7 +21,7 @@ def k_performance(kl_divergence, slowdown=1, confidence=0.9):
 
 
 # Finds the optimal settings for parameters (N) and data (D) given a compute budget (C)
-def optimal_N_D(C, A=406.4, B=410.7, alpha=0.34, beta=0.28):
+def optimal_N_D(C, A=A_param, B=B_param, alpha=alpha_param, beta=beta_param):
     G = (alpha * A)/(beta * B) ** (1 / (alpha + beta))
     a = beta/(alpha + beta)
     b = alpha/(alpha + beta)
@@ -27,10 +31,10 @@ def optimal_N_D(C, A=406.4, B=410.7, alpha=0.34, beta=0.28):
 # Solves a linear equation to determine how much compute would be required to match k-performance = k
 def computation_for_k_performance(k, slowdown=1):
     """Returns log(flops)"""
-    A = np.random.normal(406.4, 25)
-    B = np.random.normal(410.7, 25)
-    alpha = np.random.normal(0.34, 0.05)
-    beta = np.random.normal(0.28, 0.05)
+    A = np.random.normal(A_param, 25)
+    B = np.random.normal(B_param, 25)
+    alpha = np.random.normal(alpha_param, 0.05)
+    beta = np.random.normal(beta_param, 0.05)
 
     compute_points = [10, 30]
     log10_k_perf_points = []
