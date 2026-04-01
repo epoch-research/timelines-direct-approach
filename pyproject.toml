@@ -19,3 +19,6 @@ websockets = "^13.0.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.uv]
+exclude-newer = "7 days"
